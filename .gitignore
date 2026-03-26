@@ -1,0 +1,67 @@
+# =============================================
+# IEDNavigator - .gitignore
+# =============================================
+
+# Clases compiladas y JARs de salida
+classes/
+target/
+dist/
+*.class
+
+# JARs: excluir todo excepto los de lib/ (dependencias pre-empaquetadas)
+*.jar
+!lib/*.jar
+
+# Backups y ZIPs
+*.zip
+*.rar
+BACKUP_*.zip
+ied_navigator_installer.zip
+
+# Versiones antiguas y copias
+IEDNavigator_completo/
+REFACTORED_SIN_NATIVE/
+SIN SMV - copia/
+SIN SMV - copia (2)/
+installer/output/
+installer/download_cache/
+
+# Binarios y ejecutables de terceros
+*.exe
+*.dll
+*.lnk
+PcapDotNet.Core.dll
+
+# Carpeta de requisitos (archivos muy pesados)
+requisistos ied_navigator/
+
+# Logs y temporales
+*.log
+MMS_log_file.txt
+
+# Documentos personales internos
+Revision_2 (Parcial).docx
+Revision_2 (Parcial).pdf
+Wavewin ABB/
+
+# Proyectos Android (repos separados)
+android-ied-navigator/
+android-ion7400-simulator/
+android_ied_simulator - que mejor salio v3.02/
+
+# Versiones antiguas empaquetadas
+IEDNavigator_v*/
+IEDNavigator.jar
+IEDNavigator_new.jar
+
+# HarmonicMonitor (repo separado)
+HarmonicMonitor/
+
+# Claude AI internal
+.claude/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.swp
