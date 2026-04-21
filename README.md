@@ -1,6 +1,6 @@
 # IEC 61850 Explorer (Java)
 
-Cliente y Servidor IEC 61850 usando **iec61850bean** (la misma libreria de la APK Android).
+Cliente y Servidor IEC 61850 usando **iec61850bean** 
 
 ## Requisitos
 
@@ -46,18 +46,11 @@ java -jar target/iec61850-explorer-1.0.0-jar-with-dependencies.jar
 - Actualizacion de valores en tiempo real
 
 ### GUI
-- Layout de 3 paneles (igual que IEDScout)
+- Layout de 3 paneles 
 - Arbol del modelo con colores de estado
 - Data Monitor con historial
 - Exportar a CSV
 
-## Ventajas sobre la version Python
-
-1. **iec61850bean** es mas madura y estable que libiec61850+ctypes
-2. Mismo codigo que la APK Android que funciona correctamente
-3. Mejor manejo de tipos de datos IEC 61850
-4. Servidor funciona directamente con archivos SCL
-5. Sin problemas de binding/ctypes
 
 ## Estructura
 
