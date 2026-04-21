@@ -8,6 +8,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 import java.util.Collection;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.*;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 /**
  * Servidor IEC 61850 usando iec61850bean
@@ -31,6 +39,7 @@ public class IEC61850Server implements ServerEventListener {
         void onServerStopped();
         void onClientWrite(String nodeRef, String value);
         void onError(String message);
+        default void onLog(String message) {}  // opcional: log informativo a la GUI
     }
 
     public void setServerListener(ServerListener listener) {
@@ -38,12 +47,18 @@ public class IEC61850Server implements ServerEventListener {
     }
 
     // Cache de modelos parseados para selección de IED
+    // parsedModels: un ServerModel por AccessPoint (resultado directo de SclParser)
+    // mergedModels: un ServerModel por IED (todos los AccessPoints fusionados)
     private List<ServerModel> parsedModels = null;
+    private List<ServerModel> mergedModels = null;
     private String currentSclPath = null;
 
     /**
-     * Obtiene la lista de IEDs disponibles en un archivo SCL
-     * Retorna lista de nombres de IED (basado en el primer LD de cada modelo)
+     * Obtiene la lista de IEDs disponibles en un archivo SCL.
+     *
+     * SclParser.parse() devuelve un ServerModel por cada AccessPoint, no por IED.
+     * Este método agrupa los modelos por IED y fusiona sus LDs en un único ServerModel
+     * por IED, de modo que el resultado es equivalente a lo que muestra CET850.
      */
     public List<String> getAvailableIEDs(String sclPath) {
         List<String> iedNames = new ArrayList<>();
@@ -51,22 +66,54 @@ public class IEC61850Server implements ServerEventListener {
             File sclFile = new File(sclPath);
             if (!sclFile.exists()) return iedNames;
 
-            try (FileInputStream fis = new FileInputStream(sclFile)) {
-                parsedModels = SclParser.parse(fis);
-                currentSclPath = sclPath;
+            // Pre-procesar: expandir arrays (SDO/DA/BDA con count > 1) ANTES de parsear
+            String expandedPath = expandSclArrays(sclPath);
+            File expandedFile = new File(expandedPath);
 
-                if (parsedModels != null) {
-                    for (ServerModel model : parsedModels) {
-                        // El nombre del IED se deriva del primer LD
-                        if (model.getChildren() != null && !model.getChildren().isEmpty()) {
-                            ModelNode firstLd = model.getChildren().iterator().next();
-                            String ldName = firstLd.getName();
-                            // Extraer nombre del IED del LD (formato: IEDName/LDInst o solo LDInst)
-                            iedNames.add(ldName.contains("/") ? ldName.split("/")[0] : "IED_" + iedNames.size());
-                        }
-                    }
-                }
+            // Paso 1: Parsear con SclParser (devuelve 1 modelo por AccessPoint)
+            try (FileInputStream fis = new FileInputStream(expandedFile)) {
+                parsedModels = SclParser.parse(fis);
+                currentSclPath = sclPath;  // guardar ruta original como clave de cache
             }
+
+            if (parsedModels == null || parsedModels.isEmpty()) return iedNames;
+
+            // Paso 2: Parsear XML para obtener IED names y conteo de AccessPoints por IED
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(false);
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(expandedFile);  // usar archivo expandido también aquí
+
+            NodeList ieds = doc.getElementsByTagName("IED");
+            mergedModels = new ArrayList<>();
+            int modelIndex = 0;
+
+            for (int i = 0; i < ieds.getLength(); i++) {
+                Element ied = (Element) ieds.item(i);
+                String name = ied.getAttribute("name");
+                if (name == null || name.isEmpty()) name = "IED_" + i;
+                iedNames.add(name);
+
+                // Contar AccessPoints de este IED
+                NodeList aps = ied.getElementsByTagName("AccessPoint");
+                int apCount = Math.max(1, aps.getLength());
+
+                // Fusionar todos los AccessPoints de este IED en un único ServerModel
+                ServerModel merged = mergeModels(parsedModels, modelIndex, modelIndex + apCount);
+                mergedModels.add(merged);
+
+                System.out.println("[SERVER] IED '" + name + "': " + apCount
+                        + " AccessPoint(s), " + merged.getChildren().size() + " LDs total");
+
+                modelIndex += apCount;
+            }
+
+            // Fallback: si el XML no tenía IEDs pero SclParser sí devolvió modelos
+            if (iedNames.isEmpty() && !parsedModels.isEmpty()) {
+                iedNames.add("IED_0");
+                mergedModels.add(parsedModels.get(0));
+            }
+
         } catch (Exception e) {
             System.err.println("[SERVER] Error getting IED list: " + e.getMessage());
         }
@@ -74,28 +121,139 @@ public class IEC61850Server implements ServerEventListener {
     }
 
     /**
-     * Carga un IED específico por índice
+     * Fusiona los LDs y DataSets de varios AccessPoints consecutivos en un único ServerModel.
+     * fromIdx es inclusivo, toIdx es exclusivo.
+     */
+    private ServerModel mergeModels(List<ServerModel> models, int fromIdx, int toIdx) {
+        List<LogicalDevice> allLDs = new ArrayList<>();
+        List<DataSet> allDataSets = new ArrayList<>();
+
+        for (int i = fromIdx; i < toIdx && i < models.size(); i++) {
+            ServerModel m = models.get(i);
+            for (ModelNode child : m.getChildren()) {
+                if (child instanceof LogicalDevice) {
+                    allLDs.add((LogicalDevice) child);
+                }
+            }
+            Collection<DataSet> ds = m.getDataSets();
+            if (ds != null) allDataSets.addAll(ds);
+        }
+
+        return new ServerModel(allLDs, allDataSets);
+    }
+
+    /**
+     * Carga un IED específico por índice (sobre la lista de IEDs únicos).
+     * Usa el ServerModel ya fusionado que incluye todos los AccessPoints del IED.
      */
     public boolean loadSclFileWithIED(String sclPath, int iedIndex) {
         try {
-            // Si ya parseamos este archivo, usar el cache
-            if (parsedModels != null && sclPath.equals(currentSclPath)) {
-                if (iedIndex >= 0 && iedIndex < parsedModels.size()) {
-                    serverModel = parsedModels.get(iedIndex);
+            // Usar el cache si el archivo ya fue parseado
+            if (mergedModels != null && sclPath.equals(currentSclPath)) {
+                if (iedIndex >= 0 && iedIndex < mergedModels.size()) {
+                    serverModel = mergedModels.get(iedIndex);
                     indexAttributes(serverModel);
-                    System.out.println("[SERVER] Loaded IED index " + iedIndex + " from cache");
+                    System.out.println("[SERVER] Loaded merged IED index " + iedIndex + " from cache");
                     System.out.println("[SERVER] LDs found: " + serverModel.getChildren().size());
-                    // Mostrar info de debug también para modelos cacheados
                     debugPrintModelInfo(serverModel);
                     return true;
                 }
             }
 
-            // Si no, parsear de nuevo
+            // Si no hay cache, parsear de nuevo (llamada directa sin selección previa)
             return loadSclFile(sclPath, iedIndex);
         } catch (Exception e) {
             System.err.println("[ERROR] " + e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Pre-procesa el SCL expandiendo elementos con atributo count > 1.
+     * Elementos SDO/DA/BDA con count="N" se reemplazan por N elementos individuales
+     * con nombres indexados (p.ej. phsAHar01..phsAHar50 para count=50).
+     * Retorna la ruta del archivo expandido (temp) o la original si no hay arrays.
+     */
+    private String expandSclArrays(String sclPath) {
+        if (listener != null) listener.onLog("[SCL] Iniciando expansión de arrays en: " + new File(sclPath).getName());
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);  // preservar namespace xmlns="http://www.iec.ch/61850/2003/SCL"
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new File(sclPath));
+
+            int totalExpanded = 0;
+
+            // Expandir SDO, DA y BDA con atributo count
+            for (String tag : new String[]{"SDO", "DA", "BDA"}) {
+                // getElementsByTagNameNS("*", tag) encuentra elementos con cualquier namespace
+                NodeList nodes = doc.getElementsByTagNameNS("*", tag);
+                List<Element> toExpand = new ArrayList<>();
+                for (int i = 0; i < nodes.getLength(); i++) {
+                    Element el = (Element) nodes.item(i);
+                    String countStr = el.getAttribute("count").trim();
+                    if (!countStr.isEmpty()) {
+                        try {
+                            int count = Integer.parseInt(countStr);
+                            if (count > 1) toExpand.add(el);
+                        } catch (NumberFormatException ignore) {}
+                    }
+                }
+
+                for (Element el : toExpand) {
+                    int count = Integer.parseInt(el.getAttribute("count").trim());
+                    String name = el.getAttribute("name");
+                    org.w3c.dom.Node parent = el.getParentNode();
+                    String nsUri = el.getNamespaceURI();  // preservar namespace del elemento
+
+                    // Determinar padding: mínimo 2 dígitos
+                    int digits = Math.max(2, String.valueOf(count).length());
+
+                    org.w3c.dom.NamedNodeMap attrs = el.getAttributes();
+
+                    for (int i = 0; i < count; i++) {
+                        String indexedName = name + String.format("%0" + digits + "d", i);
+                        // Crear elemento con mismo namespace que el original
+                        Element newEl = (nsUri != null)
+                            ? doc.createElementNS(nsUri, tag)
+                            : doc.createElement(tag);
+                        // Copiar todos los atributos excepto count
+                        for (int a = 0; a < attrs.getLength(); a++) {
+                            org.w3c.dom.Attr attr = (org.w3c.dom.Attr) attrs.item(a);
+                            String attrName = attr.getName();
+                            if (!attrName.equals("count") && !attrName.startsWith("xmlns")) {
+                                newEl.setAttribute(attrName, attr.getValue());
+                            }
+                        }
+                        newEl.setAttribute("name", indexedName);
+                        parent.insertBefore(newEl, el);
+                    }
+                    parent.removeChild(el);
+                    totalExpanded++;
+                }
+            }
+
+            if (listener != null) listener.onLog("[SCL] Arrays con count encontrados: " + totalExpanded);
+            if (totalExpanded == 0) return sclPath;
+
+            // Escribir a archivo temporal preservando namespace
+            File tempFile = File.createTempFile("ied_expanded_", ".cid");
+            tempFile.deleteOnExit();
+            TransformerFactory tf = TransformerFactory.newInstance();
+            Transformer transformer = tf.newTransformer();
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.setOutputProperty(OutputKeys.INDENT, "yes");
+            transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
+            transformer.transform(new DOMSource(doc), new StreamResult(tempFile));
+
+            if (listener != null) listener.onLog("[SCL] " + totalExpanded + " arrays expandidos → " + tempFile.getName());
+            System.out.println("[SERVER] SCL array expansion: " + totalExpanded + " arrays → " + tempFile.getAbsolutePath());
+            return tempFile.getAbsolutePath();
+
+        } catch (Exception e) {
+            if (listener != null) listener.onLog("[SCL] ERROR en expansión: " + e.getMessage());
+            System.err.println("[SERVER] SCL array expansion failed: " + e.getMessage());
+            return sclPath;
         }
     }
 
@@ -122,9 +280,13 @@ public class IEC61850Server implements ServerEventListener {
             System.out.println("[SERVER] File size: " + sclFile.length() + " bytes");
             System.out.println("[SERVER] Parsing SCL (this may take a moment for large files)...");
 
+            // Pre-procesar: expandir arrays SCL (SDO/DA/BDA con count > 1)
+            String expandedPath = expandSclArrays(sclPath);
+            File expandedFile = new File(expandedPath);
+
             // Parsear SCL usando InputStream (igual que la APK)
             long startTime = System.currentTimeMillis();
-            try (FileInputStream fis = new FileInputStream(sclFile)) {
+            try (FileInputStream fis = new FileInputStream(expandedFile)) {
                 List<ServerModel> models = SclParser.parse(fis);
 
                 long parseTime = System.currentTimeMillis() - startTime;
@@ -430,6 +592,18 @@ public class IEC61850Server implements ServerEventListener {
                 check.setSynchrocheck("true".equalsIgnoreCase(value) || "1".equals(value));
             } else if (bda instanceof BdaTapCommand) {
                 setTapCommandValue((BdaTapCommand) bda, value);
+            } else if (bda instanceof BdaInt8U) {
+                try {
+                    ((BdaInt8U) bda).setValue(Short.parseShort(value.trim()));
+                } catch (NumberFormatException e2) {
+                    System.err.println("[ERROR] BdaInt8U value must be integer: " + value);
+                }
+            } else if (bda instanceof BdaInt16U) {
+                try {
+                    ((BdaInt16U) bda).setValue(Integer.parseInt(value.trim()));
+                } catch (NumberFormatException e2) {
+                    System.err.println("[ERROR] BdaInt16U value must be integer: " + value);
+                }
             }
         } catch (Exception e) {
             System.err.println("[ERROR] Setting value: " + e.getMessage());

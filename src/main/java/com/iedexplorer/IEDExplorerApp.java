@@ -54,6 +54,13 @@ public class IEDExplorerApp extends JFrame {
     // Archivo SCL cargado (para extraer GoCBs)
     private File loadedSclFile = null;
     private String loadedIedName = null;
+    private String[] loadedIedNameplate = null; // [manufacturer, type, desc, configVersion]
+
+    // DataTypeTemplates parsed from SCL for BdaEnum dropdown support
+    private Map<String, LinkedHashMap<Integer, String>> sclEnumTypes = new HashMap<>();
+    private Map<String, String> sclDaEnumType = new HashMap<>();    // "doTypeId.daName" → enumTypeId
+    private Map<String, Map<String, String>> sclLnTypeDoTypes = new HashMap<>(); // lnTypeId → {doName → doTypeId}
+    private Map<String, String> sclLnClassToLnType = new HashMap<>();  // lnClass → lnTypeId
     private List<SclGoCB> sclGoCBs = new ArrayList<>();
 
     // CID descargado del IED
@@ -97,6 +104,7 @@ public class IEDExplorerApp extends JFrame {
 
     // Comunes
     private JLabel lblStatus;
+    private JLabel lblIedInfo;   // placa de identificación del IED (FC=DC)
     private JPanel statusIndicator;
     private JTree modelTree;
     private DefaultMutableTreeNode rootNode;
@@ -656,7 +664,9 @@ public class IEDExplorerApp extends JFrame {
         modelTree.setDragEnabled(true);
         modelTree.setRowHeight(20);  // Altura consistente para iconos
         modelTree.getSelectionModel().setSelectionMode(TreeSelectionModel.DISCONTIGUOUS_TREE_SELECTION);
+        modelTree.setLargeModel(true);
         JScrollPane treeScroll = new JScrollPane(modelTree);
+        treeScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         treeScroll.setBorder(BorderFactory.createTitledBorder("Modelo de Datos"));
 
         // Panel derecho con tabs: Activity Monitor, Reports, GOOSE, Setting Groups, Dataset, Data Model
@@ -872,6 +882,12 @@ public class IEDExplorerApp extends JFrame {
         JLabel lblReady = new JLabel("Listo");
         statusBar.add(lblReady, BorderLayout.WEST);
 
+        // Placa de identificación del IED (se llena tras conectar con FC=DC)
+        lblIedInfo = new JLabel(" ");
+        lblIedInfo.setFont(new java.awt.Font("Monospaced", java.awt.Font.PLAIN, 11));
+        lblIedInfo.setForeground(new Color(40, 80, 160));
+        statusBar.add(lblIedInfo, BorderLayout.CENTER);
+
         JLabel lblTime = new JLabel();
         javax.swing.Timer timer = new javax.swing.Timer(1000, e -> {
             SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss");
@@ -1037,6 +1053,10 @@ public class IEDExplorerApp extends JFrame {
         // Renderer para colorear valores
         monitorTable.setDefaultRenderer(Object.class, new MonitorTableRenderer());
 
+        // Sorter para filtrado
+        monitorSorter = new TableRowSorter<>(monitorTableModel);
+        monitorTable.setRowSorter(monitorSorter);
+
         // El drop se configura en setupDragAndDrop()
         monitorTable.setFillsViewportHeight(true);
 
@@ -1054,26 +1074,53 @@ public class IEDExplorerApp extends JFrame {
         dropHintPanel.add(lblDropHint, BorderLayout.CENTER);
         dropHintPanel.setPreferredSize(new Dimension(250, 60));
 
-        // Header con informacion
-        JPanel headerPanel = new JPanel(new BorderLayout());
+        // Header fila 1: conteo + botones
+        JPanel headerRow1 = new JPanel(new BorderLayout());
         JLabel lblCount = new JLabel(" Items: 0");
         lblCount.setFont(lblCount.getFont().deriveFont(Font.BOLD));
-        headerPanel.add(lblCount, BorderLayout.WEST);
+        headerRow1.add(lblCount, BorderLayout.WEST);
 
-        // Botones de toolbar
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 2));
-
         JButton btnRemove = new JButton("Quitar");
         btnRemove.setMargin(new Insets(2, 8, 2, 8));
         btnRemove.addActionListener(e -> removeSelectedFromMonitor());
         btnPanel.add(btnRemove);
-
         JButton btnClear = new JButton("Limpiar");
         btnClear.setMargin(new Insets(2, 8, 2, 8));
         btnClear.addActionListener(e -> clearMonitor());
         btnPanel.add(btnClear);
+        headerRow1.add(btnPanel, BorderLayout.EAST);
 
-        headerPanel.add(btnPanel, BorderLayout.EAST);
+        // Header fila 2: filtros
+        JPanel headerRow2 = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        headerRow2.add(new JLabel("FC:"));
+        monitorFcFilter = new JComboBox<>(new String[]{
+            "Todos", "ST", "MX", "CF", "DC", "SP", "SV", "BL", "CO", "SE", "SG", "EX", "RP", "BR", "OR"
+        });
+        monitorFcFilter.setPreferredSize(new Dimension(70, 22));
+        monitorFcFilter.addActionListener(e -> applyMonitorFilter());
+        headerRow2.add(monitorFcFilter);
+        headerRow2.add(new JLabel("  Nombre:"));
+        monitorNameFilter = new javax.swing.JTextField(14);
+        monitorNameFilter.setToolTipText("Filtrar por nombre (p.ej. MMXU, stVal)");
+        monitorNameFilter.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { applyMonitorFilter(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { applyMonitorFilter(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { applyMonitorFilter(); }
+        });
+        headerRow2.add(monitorNameFilter);
+        JButton btnClearFilter = new JButton("✕");
+        btnClearFilter.setMargin(new Insets(1, 4, 1, 4));
+        btnClearFilter.setToolTipText("Limpiar filtros");
+        btnClearFilter.addActionListener(e -> {
+            monitorFcFilter.setSelectedIndex(0);
+            monitorNameFilter.setText("");
+        });
+        headerRow2.add(btnClearFilter);
+
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.add(headerRow1, BorderLayout.NORTH);
+        headerPanel.add(headerRow2, BorderLayout.SOUTH);
 
         // Combinar todo
         JPanel contentPanel = new JPanel(new BorderLayout());
@@ -1090,6 +1137,9 @@ public class IEDExplorerApp extends JFrame {
     }
 
     private JLabel monitorCountLabel;
+    private TableRowSorter<DefaultTableModel> monitorSorter;
+    private JComboBox<String> monitorFcFilter;
+    private javax.swing.JTextField monitorNameFilter;
 
     private void clearMonitor() {
         monitorItems.clear();
@@ -1492,6 +1542,10 @@ public class IEDExplorerApp extends JFrame {
 
                     // Store current value as previous
                     previousReportValues.put(ref, newValue);
+
+                    // Actualizar el árbol "Modelo de Datos" con el nuevo valor
+                    // (iec61850bean ya actualizó el nodo internamente; solo notificamos al árbol)
+                    updateSingleNodeInTree(ref);
                 }
             }
             log("Report recibido: " + rcbRef + " (SeqNum: " + seqNum + ", " + (values != null ? values.size() : 0) + " valores)");
@@ -3033,6 +3087,155 @@ public class IEDExplorerApp extends JFrame {
     }
 
     /**
+     * Parsea DataTypeTemplates del DOM SCL para construir mapas de lookup de enumeraciones.
+     * Rellena sclEnumTypes, sclDaEnumType, sclLnTypeDoTypes, sclLnClassToLnType.
+     */
+    private void parseSclDataTypeTemplates(Document doc) {
+        sclEnumTypes.clear();
+        sclDaEnumType.clear();
+        sclLnTypeDoTypes.clear();
+        sclLnClassToLnType.clear();
+
+        // Parse EnumType definitions
+        NodeList enumTypes = doc.getElementsByTagName("EnumType");
+        for (int i = 0; i < enumTypes.getLength(); i++) {
+            Element et = (Element) enumTypes.item(i);
+            String id = et.getAttribute("id");
+            LinkedHashMap<Integer, String> vals = new LinkedHashMap<>();
+            NodeList enumVals = et.getElementsByTagName("EnumVal");
+            for (int j = 0; j < enumVals.getLength(); j++) {
+                Element ev = (Element) enumVals.item(j);
+                try {
+                    int ord = Integer.parseInt(ev.getAttribute("ord").trim());
+                    vals.put(ord, ev.getTextContent().trim());
+                } catch (NumberFormatException ignore) {}
+            }
+            if (!vals.isEmpty()) sclEnumTypes.put(id, vals);
+        }
+
+        // Parse DOType → DA (bType=Enum) → EnumType id
+        NodeList doTypes = doc.getElementsByTagName("DOType");
+        for (int i = 0; i < doTypes.getLength(); i++) {
+            Element dot = (Element) doTypes.item(i);
+            String doTypeId = dot.getAttribute("id");
+            NodeList das = dot.getElementsByTagName("DA");
+            for (int j = 0; j < das.getLength(); j++) {
+                Element da = (Element) das.item(j);
+                if ("Enum".equals(da.getAttribute("bType"))) {
+                    String daName = da.getAttribute("name");
+                    String enumType = da.getAttribute("type");
+                    if (!daName.isEmpty() && !enumType.isEmpty()) {
+                        sclDaEnumType.put(doTypeId + "." + daName, enumType);
+                    }
+                }
+            }
+        }
+
+        // Parse LNodeType → DO → DOType
+        NodeList lnTypes = doc.getElementsByTagName("LNodeType");
+        for (int i = 0; i < lnTypes.getLength(); i++) {
+            Element lnt = (Element) lnTypes.item(i);
+            String lnTypeId = lnt.getAttribute("id");
+            String lnClass = lnt.getAttribute("lnClass");
+            sclLnClassToLnType.putIfAbsent(lnClass, lnTypeId);
+            Map<String, String> doMap = new HashMap<>();
+            NodeList doEls = lnt.getElementsByTagName("DO");
+            for (int j = 0; j < doEls.getLength(); j++) {
+                Element doEl = (Element) doEls.item(j);
+                String doName = doEl.getAttribute("name");
+                String doType = doEl.getAttribute("type");
+                if (!doName.isEmpty() && !doType.isEmpty()) doMap.put(doName, doType);
+            }
+            sclLnTypeDoTypes.put(lnTypeId, doMap);
+        }
+        log("DataTypeTemplates: " + sclEnumTypes.size() + " EnumTypes, " + sclDaEnumType.size() + " DA enumeradas");
+    }
+
+    /** Extrae el lnClass de 4 letras a partir del nombre completo del LN (con prefijo e instancia). */
+    private String extractLnClass(String lnFull) {
+        if (lnFull == null || lnFull.isEmpty()) return "";
+        // Strip trailing digits (instance number), but keep LLN0 intact
+        if ("LLN0".equals(lnFull)) return "LLN0";
+        String noInst = lnFull.replaceAll("\\d+$", "");
+        // lnClass is the last 4 uppercase letters of the remaining string
+        if (noInst.length() >= 4) return noInst.substring(noInst.length() - 4);
+        return noInst.isEmpty() ? lnFull : noInst;
+    }
+
+    /** Devuelve el mapa ordinal→etiqueta si el nodo es un BdaInt8/Int8U con EnumType en el SCL, o null si no aplica. */
+    private LinkedHashMap<Integer, String> getEnumOptionsForNode(ModelNode node) {
+        // iec61850bean mapea bType="Enum" a BdaInt8 (signed); BdaInt8U es posible en variantes
+        if (!(node instanceof BdaInt8) && !(node instanceof BdaInt8U)) return null;
+        // Reference format: IEDNameLDInst/LNName.DOName.DAName
+        String ref = node.getReference().toString();
+        int slashIdx = ref.indexOf('/');
+        if (slashIdx < 0) return null;
+        String[] parts = ref.substring(slashIdx + 1).split("\\.");
+        if (parts.length < 3) return null;
+
+        String lnClass = extractLnClass(parts[0]);
+        String doName = parts[1];
+        String daName = parts[2];
+
+        String lnTypeId = sclLnClassToLnType.get(lnClass);
+        if (lnTypeId == null) lnTypeId = sclLnClassToLnType.get(parts[0]); // exact match fallback
+        if (lnTypeId == null) return null;
+
+        Map<String, String> doMap = sclLnTypeDoTypes.get(lnTypeId);
+        if (doMap == null) return null;
+        String doTypeId = doMap.get(doName);
+        if (doTypeId == null) return null;
+
+        String enumTypeId = sclDaEnumType.get(doTypeId + "." + daName);
+        if (enumTypeId == null) return null;
+
+        return sclEnumTypes.get(enumTypeId);
+    }
+
+    /**
+     * Formatea el valor raw de un BdaInt8U como "ord [label]" si existe EnumType en el SCL, o devuelve raw.
+     * Usar en lugar de bda.getValueString() para DAs que son enums.
+     */
+    private String formatEnumValue(ModelNode node, String rawValue) {
+        LinkedHashMap<Integer, String> enumVals = getEnumOptionsForNode(node);
+        if (enumVals == null || enumVals.isEmpty()) return rawValue;
+        try {
+            int ord = Integer.parseInt(rawValue.trim());
+            String label = enumVals.get(ord);
+            return label != null ? ord + " [" + label + "]" : rawValue;
+        } catch (NumberFormatException ignore) {
+            return rawValue;
+        }
+    }
+
+    /** Muestra un JComboBox con los valores del enum y devuelve el ordinal seleccionado como String, o null. */
+    private String showEnumDialog(String daName, int currentOrd, LinkedHashMap<Integer, String> enumVals) {
+        List<String> display = new ArrayList<>();
+        List<Integer> ords = new ArrayList<>();
+        int selIdx = 0, idx = 0;
+        for (Map.Entry<Integer, String> e : enumVals.entrySet()) {
+            display.add(e.getKey() + " [" + e.getValue() + "]");
+            ords.add(e.getKey());
+            if (e.getKey() == currentOrd) selIdx = idx;
+            idx++;
+        }
+        JComboBox<String> combo = new JComboBox<>(display.toArray(new String[0]));
+        combo.setSelectedIndex(selIdx);
+        combo.setPreferredSize(new Dimension(260, 26));
+
+        JPanel panel = new JPanel(new BorderLayout(10, 8));
+        panel.add(new JLabel("Seleccionar valor para " + daName + ":"), BorderLayout.NORTH);
+        panel.add(combo, BorderLayout.CENTER);
+
+        int result = JOptionPane.showConfirmDialog(this, panel,
+            "Establecer Valor", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result == JOptionPane.OK_OPTION && combo.getSelectedIndex() >= 0) {
+            return String.valueOf(ords.get(combo.getSelectedIndex()));
+        }
+        return null;
+    }
+
+    /**
      * Parsea el archivo SCL para extraer GSEControl (GoCBs)
      * Similar a como lo hace IEDScout
      */
@@ -3048,8 +3251,18 @@ public class IEDExplorerApp extends JFrame {
             // Obtener nombre del IED
             NodeList iedNodes = doc.getElementsByTagName("IED");
             if (iedNodes.getLength() > 0) {
-                loadedIedName = ((Element) iedNodes.item(0)).getAttribute("name");
+                Element iedEl = (Element) iedNodes.item(0);
+                loadedIedName = iedEl.getAttribute("name");
+                loadedIedNameplate = new String[] {
+                    iedEl.getAttribute("manufacturer"),
+                    iedEl.getAttribute("type"),
+                    iedEl.getAttribute("desc"),
+                    iedEl.getAttribute("configVersion")
+                };
             }
+
+            // Parsear DataTypeTemplates para lookup de enumeraciones
+            parseSclDataTypeTemplates(doc);
 
             // Buscar todos los elementos GSEControl
             NodeList gseControls = doc.getElementsByTagName("GSEControl");
@@ -3168,7 +3381,16 @@ public class IEDExplorerApp extends JFrame {
             Element selectedIED = (Element) ieds.item(iedIndex);
             String iedName = selectedIED.getAttribute("name");
             loadedIedName = iedName;
+            loadedIedNameplate = new String[] {
+                selectedIED.getAttribute("manufacturer"),
+                selectedIED.getAttribute("type"),
+                selectedIED.getAttribute("desc"),
+                selectedIED.getAttribute("configVersion")
+            };
             log("Parseando SCL para IED: " + iedName);
+
+            // Parsear DataTypeTemplates para lookup de enumeraciones
+            parseSclDataTypeTemplates(doc);
 
             // Parsear DataSets del IED seleccionado
             parseDataSetsFromIED(selectedIED);
@@ -3692,7 +3914,7 @@ public class IEDExplorerApp extends JFrame {
                     String displayName = formatReference(ref);
                     MonitorItem item = new MonitorItem(ref, displayName, fc.toString(), type, fcNode);
                     if (info.node instanceof BasicDataAttribute) {
-                        item.value = ((BasicDataAttribute) info.node).getValueString();
+                        item.value = formatEnumValue(info.node, ((BasicDataAttribute) info.node).getValueString());
                         if (item.value == null) item.value = "";
                     }
                     monitorItems.put(fullRef, item);
@@ -3770,9 +3992,41 @@ public class IEDExplorerApp extends JFrame {
                 status
             });
         }
-        // Actualizar contador
+        // Actualizar contador y reaplicar filtro
         if (monitorCountLabel != null) {
             monitorCountLabel.setText(" Items: " + monitorItems.size());
+        }
+        applyMonitorFilter();
+    }
+
+    /** Aplica filtro de FC y nombre al monitor. Actualiza el contador con visibles/total. */
+    private void applyMonitorFilter() {
+        if (monitorSorter == null) return;
+        String fc   = monitorFcFilter != null ? (String) monitorFcFilter.getSelectedItem() : "Todos";
+        String name = monitorNameFilter != null ? monitorNameFilter.getText().trim().toLowerCase() : "";
+
+        boolean fcAll  = fc == null || fc.equals("Todos");
+        boolean nameAll = name.isEmpty();
+
+        if (fcAll && nameAll) {
+            monitorSorter.setRowFilter(null);
+        } else {
+            final String fcFinal = fc;
+            monitorSorter.setRowFilter(RowFilter.andFilter(java.util.Arrays.asList(
+                fcAll ? null : RowFilter.regexFilter("(?i)^" + fcFinal + "$", 1),
+                nameAll ? null : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(name), 0)
+            ).stream().filter(f -> f != null).collect(java.util.stream.Collectors.toList())));
+        }
+
+        // Actualizar contador con visible/total
+        if (monitorCountLabel != null) {
+            int visible = monitorTable.getRowCount();
+            int total   = monitorItems.size();
+            if (visible == total) {
+                monitorCountLabel.setText(" Items: " + total);
+            } else {
+                monitorCountLabel.setText(" Items: " + total + "  (visible: " + visible + ")");
+            }
         }
     }
 
@@ -3965,6 +4219,27 @@ public class IEDExplorerApp extends JFrame {
         });
         treePopupMenu.add(miAddToMonitor);
 
+        treePopupMenu.addSeparator();
+
+        // FC=BL: Bloquear / Desbloquear valor del DO
+        JMenuItem miBlock   = new JMenuItem("Bloquear valor (blkEna=true)");
+        JMenuItem miUnblock = new JMenuItem("Desbloquear valor (blkEna=false)");
+        miBlock.addActionListener(e   -> toggleBlocking(true));
+        miUnblock.addActionListener(e -> toggleBlocking(false));
+        treePopupMenu.add(miBlock);
+        treePopupMenu.add(miUnblock);
+
+        // Mostrar/ocultar ítems BL según el nodo seleccionado
+        treePopupMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                boolean hasBlk = getSelectedBlkEnaNode() != null;
+                miBlock.setVisible(hasBlk);
+                miUnblock.setVisible(hasBlk);
+            }
+            public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) {}
+            public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
+        });
+
         // === Menu para modo SERVIDOR se construye dinamicamente ===
         serverPopupMenu = new JPopupMenu();
     }
@@ -3985,6 +4260,8 @@ public class IEDExplorerApp extends JFrame {
         boolean isDbpos = (info.node instanceof BdaDoubleBitPos)
             || (info.type != null && info.type.contains("DoubleBit"));
         boolean isTapCmd = (info.node instanceof BdaTapCommand);
+        LinkedHashMap<Integer, String> precomputedEnumVals = getEnumOptionsForNode(info.node);
+        boolean isEnum  = (precomputedEnumVals != null);
         boolean isDO = (info.node instanceof FcDataObject);
 
         // If it's a DO, check child stVal type
@@ -3994,6 +4271,10 @@ public class IEDExplorerApp extends JFrame {
                     if (child instanceof BdaBoolean) isBoolean = true;
                     else if (child instanceof BdaDoubleBitPos) isDbpos = true;
                     else if (child instanceof BdaTapCommand) isTapCmd = true;
+                    else if (child instanceof BdaInt8 || child instanceof BdaInt8U) {
+                        precomputedEnumVals = getEnumOptionsForNode(child);
+                        if (precomputedEnumVals != null) isEnum = true;
+                    }
                     break;
                 }
             }
@@ -4029,6 +4310,11 @@ public class IEDExplorerApp extends JFrame {
                 mi.addActionListener(e -> setSelectedNodeValue(cmd.toLowerCase()));
                 serverPopupMenu.add(mi);
             }
+        } else if (isEnum) {
+            // Enum: show dropdown with enum values from SCL DataTypeTemplates
+            JMenuItem miEnum = new JMenuItem("Establecer valor (enum)...");
+            miEnum.addActionListener(e -> setSelectedNodeCustomValue());
+            serverPopupMenu.add(miEnum);
         } else {
             // Generic: show custom value dialog
             JMenuItem miSet = new JMenuItem("Establecer valor...");
@@ -4481,7 +4767,7 @@ public class IEDExplorerApp extends JFrame {
 
                 if (node instanceof BasicDataAttribute) {
                     BasicDataAttribute bda = (BasicDataAttribute) node;
-                    String newVal = bda.getValueString();
+                    String newVal = formatEnumValue(node, bda.getValueString());
                     if (newVal == null) newVal = "";
 
                     // Actualizar si cambio
@@ -4528,6 +4814,21 @@ public class IEDExplorerApp extends JFrame {
             } else if (info.node instanceof BdaTapCommand) {
                 // Mostrar dropdown para TapCommand
                 newValue = showTapCommandDialog(info.name, currentValue);
+            } else if (info.node instanceof BdaInt8 || info.node instanceof BdaInt8U) {
+                // Puede ser un enum (bType="Enum" → BdaInt8 en iec61850bean)
+                int currentOrd = 0;
+                try {
+                    if (info.node instanceof BdaInt8) currentOrd = ((BdaInt8) info.node).getValue();
+                    else currentOrd = ((BdaInt8U) info.node).getValue();
+                } catch (Exception ignore) {}
+                LinkedHashMap<Integer, String> enumVals = getEnumOptionsForNode(info.node);
+                if (enumVals != null && !enumVals.isEmpty()) {
+                    newValue = showEnumDialog(info.name, currentOrd, enumVals);
+                } else {
+                    // No es enum conocido — input numérico
+                    newValue = JOptionPane.showInputDialog(this,
+                        "Nuevo valor para " + info.name + " (entero):", String.valueOf(currentOrd));
+                }
             } else {
                 // Otros tipos: usar input de texto
                 newValue = JOptionPane.showInputDialog(this,
@@ -4635,7 +4936,7 @@ public class IEDExplorerApp extends JFrame {
         if (treeNode != null && treeNode.getUserObject() instanceof NodeInfo) {
             NodeInfo info = (NodeInfo) treeNode.getUserObject();
             if (info.node instanceof BasicDataAttribute) {
-                info.value = ((BasicDataAttribute) info.node).getValueString();
+                info.value = formatEnumValue(info.node, ((BasicDataAttribute) info.node).getValueString());
                 treeModel.nodeChanged(treeNode);
                 return;
             }
@@ -4647,7 +4948,7 @@ public class IEDExplorerApp extends JFrame {
                 if (node.getUserObject() instanceof NodeInfo) {
                     NodeInfo info = (NodeInfo) node.getUserObject();
                     if (info.node instanceof BasicDataAttribute) {
-                        info.value = ((BasicDataAttribute) info.node).getValueString();
+                        info.value = formatEnumValue(info.node, ((BasicDataAttribute) info.node).getValueString());
                         treeModel.nodeChanged(node);
                     }
                 }
@@ -5073,6 +5374,16 @@ public class IEDExplorerApp extends JFrame {
                                     availableIEDs.get(finalSelectedIED) : "IED";
                                 updateStatus(false, "SCL cargado - " + iedName);
                                 lblFileName.setText(file.getName() + " [" + iedName + "]");
+                                // Mostrar nameplate del IED en status bar
+                                if (loadedIedNameplate != null) {
+                                    String mfr  = loadedIedNameplate[0].isEmpty() ? "?" : loadedIedNameplate[0];
+                                    String type = loadedIedNameplate[1].isEmpty() ? "?" : loadedIedNameplate[1];
+                                    String cfgV = loadedIedNameplate[3].isEmpty() ? "" : "  cfg:" + loadedIedNameplate[3];
+                                    String plate = String.format("  IED: %s  |  Fabricante: %s  |  Tipo: %s%s",
+                                        iedName, mfr, type, cfgV);
+                                    lblIedInfo.setText(plate);
+                                    log("Nameplate: fabricante=" + mfr + " tipo=" + type + cfgV.trim());
+                                }
                                 log("Construyendo arbol...");
                                 displayServerModel();
                                 log("SCL cargado correctamente");
@@ -5242,6 +5553,21 @@ public class IEDExplorerApp extends JFrame {
                         displayClientModel();
                         log("Conectado! Modelo recibido.");
 
+                        // Leer placa de identificación del IED (FC=DC) en background
+                        backgroundExecutor.submit(() -> {
+                            Map<String, String> plate = client.readDeviceNameplate();
+                            if (!plate.isEmpty()) {
+                                String info = String.format("  IED: %s  |  FW: %s  |  Config: %s",
+                                    plate.getOrDefault("vendor",    "?"),
+                                    plate.getOrDefault("swRev",     "?"),
+                                    plate.getOrDefault("configRev", "?"));
+                                SwingUtilities.invokeLater(() -> {
+                                    lblIedInfo.setText(info);
+                                    log("Placa IED →" + info.trim());
+                                });
+                            }
+                        });
+
                         // Auto-seleccionar interfaz de red para GOOSE
                         autoSelectGooseInterface(finalLocalIp);
 
@@ -5283,6 +5609,7 @@ public class IEDExplorerApp extends JFrame {
         spinnerInterval.setEnabled(false);
         updateStatus(false, "Desconectado");
         updateConnectionInfo("", 0);
+        lblIedInfo.setText(" ");
         clearModel();
     }
 
@@ -5543,7 +5870,7 @@ public class IEDExplorerApp extends JFrame {
             NodeInfo info = (NodeInfo) userObj;
             if (info.node instanceof BasicDataAttribute) {
                 BasicDataAttribute bda = (BasicDataAttribute) info.node;
-                String newValue = bda.getValueString();
+                String newValue = formatEnumValue(info.node, bda.getValueString());
                 if (newValue == null) newValue = "";
                 if (!newValue.equals(info.value == null ? "" : info.value)) {
                     info.value = newValue;
@@ -5557,6 +5884,57 @@ public class IEDExplorerApp extends JFrame {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) treeNode.getChildAt(i);
             updateVisibleTreeNodes(child);
         }
+    }
+
+    /**
+     * Obtiene el nodo blkEna[BL] del DO seleccionado en el árbol (cliente).
+     * Busca en el DO seleccionado o en el nodo actual si ya es blkEna[BL].
+     */
+    private com.beanit.iec61850bean.FcModelNode getSelectedBlkEnaNode() {
+        TreePath path = modelTree.getSelectionPath();
+        if (path == null) return null;
+        Object userObj = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
+        if (!(userObj instanceof NodeInfo)) return null;
+        NodeInfo info = (NodeInfo) userObj;
+        if (info.node == null) return null;
+
+        // Si el nodo seleccionado ya es blkEna[BL]
+        if ("blkEna".equalsIgnoreCase(info.node.getName()) && "BL".equals(info.fc)) {
+            return info.node instanceof com.beanit.iec61850bean.FcModelNode
+                ? (com.beanit.iec61850bean.FcModelNode) info.node : null;
+        }
+
+        // Si es un DO, buscar blkEna entre sus hijos
+        if ("DO".equals(info.prefix)) {
+            String doRef = info.node.getReference().toString();
+            return client.findBlkEnaNode(doRef);
+        }
+        return null;
+    }
+
+    /** Activa o desactiva el bloqueo (blkEna) del DO seleccionado en modo cliente. */
+    private void toggleBlocking(boolean block) {
+        com.beanit.iec61850bean.FcModelNode blkNode = getSelectedBlkEnaNode();
+        if (blkNode == null) {
+            log("Este nodo no soporta FC=BL (blkEna no encontrado)");
+            return;
+        }
+        backgroundExecutor.submit(() -> {
+            try {
+                client.setBlocking(blkNode, block);
+                String ref = blkNode.getReference().toString();
+                SwingUtilities.invokeLater(() -> {
+                    log((block ? "Bloqueado" : "Desbloqueado") + ": " + ref);
+                    // Refrescar el nodo en el árbol
+                    TreePath path = modelTree.getSelectionPath();
+                    if (path != null) {
+                        updateTreeNodeRecursive((DefaultMutableTreeNode) path.getLastPathComponent());
+                    }
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> log("Error setBlocking: " + ex.getMessage()));
+            }
+        });
     }
 
     private void readSelectedNode() {
@@ -5975,7 +6353,7 @@ public class IEDExplorerApp extends JFrame {
 
         if (node instanceof BasicDataAttribute) {
             BasicDataAttribute bda = (BasicDataAttribute) node;
-            info.value = bda.getValueString();
+            info.value = formatEnumValue(node, bda.getValueString());
             info.type = bda.getClass().getSimpleName().replace("Bda", "");
         }
 
@@ -6093,6 +6471,7 @@ public class IEDExplorerApp extends JFrame {
         private final Color COLOR_ON = new Color(0, 150, 0);
         private final Color COLOR_OFF = new Color(200, 0, 0);
         private final Color COLOR_INTERMEDIATE = new Color(255, 140, 0);
+        private final Color COLOR_BL = new Color(120, 80, 180);  // violeta: FC=BL (bloqueo)
 
         @Override
         public Component getTreeCellRendererComponent(JTree tree, Object value,
@@ -6123,13 +6502,26 @@ public class IEDExplorerApp extends JFrame {
                     // === COLOREAR SEGUN ESTADO ===
                     if (info.value != null && !info.value.isEmpty()) {
                         String v = info.value.toLowerCase();
-                        if (v.equals("on") || v.equals("2")) {
+                        // Extraer etiqueta de valores formateados como "2 [Warning]"
+                        String label = v.contains("[") && v.contains("]")
+                            ? v.substring(v.indexOf('[') + 1, v.lastIndexOf(']')).trim() : v;
+                        String ord   = v.contains(" ") ? v.substring(0, v.indexOf(' ')).trim() : v;
+
+                        boolean isOn  = label.equals("on") || label.equals("ok") || label.equals("closed")
+                            || label.equals("true") || (!v.contains("[") && (v.equals("on") || v.equals("2")));
+                        boolean isOff = label.equals("off") || label.equals("alarm") || label.equals("open")
+                            || label.equals("false") || (!v.contains("[") && (v.equals("off") || v.equals("1")));
+                        boolean isWarn = label.equals("warning") || label.contains("intermediate")
+                            || label.equals("bad") || label.equals("bad_state") || label.equals("blocked")
+                            || label.equals("test") || (!v.contains("[") && (v.equals("0") || v.equals("3")));
+
+                        if (isOn) {
                             setForeground(COLOR_ON);
                             setFont(getFont().deriveFont(Font.BOLD));
-                        } else if (v.equals("off") || v.equals("1")) {
+                        } else if (isOff) {
                             setForeground(COLOR_OFF);
                             setFont(getFont().deriveFont(Font.BOLD));
-                        } else if (v.contains("intermediate") || v.equals("0") || v.equals("3")) {
+                        } else if (isWarn) {
                             setForeground(COLOR_INTERMEDIATE);
                             setFont(getFont().deriveFont(Font.BOLD));
                         } else if (inWatchlist) {
@@ -6137,6 +6529,12 @@ public class IEDExplorerApp extends JFrame {
                         }
                     } else if (inWatchlist) {
                         setForeground(WATCHLIST_COLOR);
+                    }
+
+                    // FC=BL: nodo de bloqueo → color violeta + prefijo candado
+                    if ("BL".equals(info.fc)) {
+                        setForeground(COLOR_BL);
+                        if (!getText().startsWith("🔒")) setText("🔒 " + getText());
                     }
 
                     // Agregar asterisco si esta en watchlist
@@ -6188,13 +6586,15 @@ public class IEDExplorerApp extends JFrame {
                 // stVal de posicion -> icono segun estado
                 if (name.equalsIgnoreCase("stVal") && info.value != null) {
                     String v = info.value.toLowerCase();
-                    if (v.equals("on") || v.equals("2")) {
-                        return iconCache.get("breaker_on");
-                    } else if (v.equals("off") || v.equals("1")) {
-                        return iconCache.get("breaker_off");
-                    } else {
-                        return iconCache.get("breaker_intermediate");
-                    }
+                    String label = v.contains("[") && v.contains("]")
+                        ? v.substring(v.indexOf('[') + 1, v.lastIndexOf(']')).trim() : v;
+                    boolean iconOn  = label.equals("on") || label.equals("ok") || label.equals("closed")
+                        || (!v.contains("[") && v.equals("2"));
+                    boolean iconOff = label.equals("off") || label.equals("alarm") || label.equals("open")
+                        || (!v.contains("[") && v.equals("1"));
+                    if (iconOn)  return iconCache.get("breaker_on");
+                    if (iconOff) return iconCache.get("breaker_off");
+                    return iconCache.get("breaker_intermediate");
                 }
                 return iconCache.get("da");
             }
@@ -6277,17 +6677,40 @@ public class IEDExplorerApp extends JFrame {
             return;
         }
 
-        // Buscar Setting Group Control Blocks (SGCB)
+        // Poblar tabla con nodos SE/SG/SP del modelo local
         for (ModelNode ld : model.getChildren()) {
             for (ModelNode ln : ld.getChildren()) {
                 if (ln instanceof LogicalNode) {
-                    LogicalNode logicalNode = (LogicalNode) ln;
-                    // Buscar nodos que contengan SG
-                    findSettingGroups(logicalNode, ld.getName() + "/" + ln.getName());
+                    findSettingGroups((LogicalNode) ln, ld.getName() + "/" + ln.getName());
                 }
             }
         }
-        log("Setting Groups actualizados: " + settingGroupsTableModel.getRowCount() + " encontrados");
+        log("Setting Groups: " + settingGroupsTableModel.getRowCount() + " nodos encontrados");
+
+        // En modo cliente: leer actSG/numOfSGs reales del IED via MMS
+        if (currentMode == AppMode.CLIENT && isConnected && client != null) {
+            backgroundExecutor.submit(() -> {
+                for (ModelNode ld : model.getChildren()) {
+                    String ldName = ld.getName();
+                    int[] vals = client.readSGCBValues(ldName);
+                    if (vals != null) {
+                        final int actSg  = vals[0];
+                        final int numSgs = vals[1];
+                        SwingUtilities.invokeLater(() -> {
+                            log(String.format("[SGCB] %s → actSG=%d, numOfSGs=%d", ldName, actSg, numSgs));
+                            // Actualizar columnas 1 y 2 para las filas de este LD
+                            for (int r = 0; r < settingGroupsTableModel.getRowCount(); r++) {
+                                String ref = (String) settingGroupsTableModel.getValueAt(r, 0);
+                                if (ref != null && ref.startsWith(ldName + "/")) {
+                                    settingGroupsTableModel.setValueAt(String.valueOf(actSg),  r, 1);
+                                    settingGroupsTableModel.setValueAt(String.valueOf(numSgs), r, 2);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        }
     }
 
     private void findSettingGroups(LogicalNode ln, String path) {
@@ -6347,9 +6770,65 @@ public class IEDExplorerApp extends JFrame {
             JOptionPane.showMessageDialog(this, "Seleccione un Setting Group");
             return;
         }
-        String name = (String) settingGroupsTableModel.getValueAt(row, 0);
-        log("Activando Setting Group: " + name);
-        JOptionPane.showMessageDialog(this, "Setting Group activado: " + name);
+
+        if (currentMode != AppMode.CLIENT || !isConnected || client == null) {
+            JOptionPane.showMessageDialog(this,
+                "Activar grupo disponible solo en modo Cliente conectado.",
+                "No disponible", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Extraer ldName de la referencia "LD0/LLN0.DO"
+        String ref    = (String) settingGroupsTableModel.getValueAt(row, 0);
+        String numStr = (String) settingGroupsTableModel.getValueAt(row, 2);
+        String ldName = ref.contains("/") ? ref.split("/")[0] : "LD0";
+
+        int numSgs = 1;
+        try { numSgs = Integer.parseInt(numStr); } catch (Exception ignored) {}
+
+        // Construir opciones de grupo
+        String[] opciones = new String[numSgs];
+        for (int i = 0; i < numSgs; i++) opciones[i] = "Grupo " + (i + 1);
+
+        String sel = (String) JOptionPane.showInputDialog(this,
+            "Seleccione el grupo de ajuste a activar en " + ldName + ":\n\n"
+            + "⚠  ATENCIÓN: esto modifica la protección activa en tiempo real.",
+            "Activar Setting Group", JOptionPane.WARNING_MESSAGE,
+            null, opciones, opciones[0]);
+
+        if (sel == null) return;
+
+        int groupNum = Integer.parseInt(sel.replace("Grupo ", ""));
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "¿Confirma activar el " + sel + " en " + ldName + "?\n"
+            + "Esta acción cambia la configuración de protección activa.",
+            "Confirmar cambio de grupo",
+            JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        final String finalLd = ldName;
+        final int    finalGn = groupNum;
+        backgroundExecutor.submit(() -> {
+            try {
+                client.selectActiveSG(finalLd, finalGn);
+                SwingUtilities.invokeLater(() -> {
+                    log("[SGCB] Grupo " + finalGn + " activado en " + finalLd);
+                    JOptionPane.showMessageDialog(this,
+                        "Grupo " + finalGn + " activado en " + finalLd,
+                        "OK", JOptionPane.INFORMATION_MESSAGE);
+                    refreshSettingGroups();  // actualizar para reflejar nuevo actSG
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    log("[ERROR SGCB] " + ex.getMessage());
+                    JOptionPane.showMessageDialog(this,
+                        "Error al activar grupo: " + ex.getMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+        });
     }
 
     private void editSelectedSettingGroup() {
@@ -6358,9 +6837,13 @@ public class IEDExplorerApp extends JFrame {
             JOptionPane.showMessageDialog(this, "Seleccione un Setting Group");
             return;
         }
-        String name = (String) settingGroupsTableModel.getValueAt(row, 0);
-        log("Editando Setting Group: " + name);
-        JOptionPane.showMessageDialog(this, "Editor de Setting Group: " + name + "\n(Funcionalidad en desarrollo)");
+        String ref = (String) settingGroupsTableModel.getValueAt(row, 0);
+        String fc  = (String) settingGroupsTableModel.getValueAt(row, 3);
+        JOptionPane.showMessageDialog(this,
+            "Edición de ajustes (FC=" + fc + ") para:\n" + ref
+            + "\n\nUse la pestaña 'Data Model' o el árbol del modelo\n"
+            + "para modificar valores individuales con doble clic.",
+            "Editar Setting Group", JOptionPane.INFORMATION_MESSAGE);
     }
 
     // ========== DATASET PANEL ==========

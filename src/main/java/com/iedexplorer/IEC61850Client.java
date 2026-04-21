@@ -282,6 +282,55 @@ public class IEC61850Client implements ClientEventListener {
     }
 
     /**
+     * Lee la placa de identificación del IED via FC=DC (IEC 61850-6 §9.5.4.1 — CDC LPL/DPL).
+     * Retorna mapa con claves: vendor, swRev, hwRev, configRev, d, phy.vendor, phy.model, phy.serNum.
+     * Las claves ausentes simplemente no están en el mapa (nodo no presente en el IED).
+     */
+    public Map<String, String> readDeviceNameplate() {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (!isConnected() || serverModel == null) return result;
+
+        // Detectar prefijo del primer LD del modelo
+        String ldPrefix = "";
+        if (serverModel.getChildren() != null && !serverModel.getChildren().isEmpty()) {
+            ldPrefix = serverModel.getChildren().iterator().next().getName() + "/";
+        }
+        System.out.println("[Nameplate] Buscando con prefijo LD: '" + ldPrefix + "'");
+
+        String[][] refs = {
+            {"LLN0.NamPlt.vendor",    "vendor"},
+            {"LLN0.NamPlt.swRev",     "swRev"},
+            {"LLN0.NamPlt.hwRev",     "hwRev"},
+            {"LLN0.NamPlt.configRev", "configRev"},
+            {"LLN0.NamPlt.d",         "d"},
+            {"LPHD1.PhyNam.vendor",   "phy.vendor"},
+            {"LPHD1.PhyNam.model",    "phy.model"},
+            {"LPHD1.PhyNam.serNum",   "phy.serNum"},
+        };
+
+        for (String[] ref : refs) {
+            String fullRef = ldPrefix + ref[0];
+            try {
+                ModelNode node = serverModel.findModelNode(fullRef, Fc.DC);
+                if (node instanceof FcModelNode) {
+                    association.getDataValues((FcModelNode) node);
+                    String val = formatValue(node);
+                    System.out.println("[Nameplate] " + fullRef + " = '" + val + "'");
+                    if (val != null && !val.isEmpty() && !val.equals("null")) {
+                        result.put(ref[1], val);
+                    }
+                } else {
+                    System.out.println("[Nameplate] " + fullRef + " → nodo no encontrado o no FC=DC (node=" + node + ")");
+                }
+            } catch (Exception e) {
+                System.out.println("[Nameplate] " + fullRef + " → excepción: " + e.getMessage());
+            }
+        }
+        System.out.println("[Nameplate] Resultado: " + result);
+        return result;
+    }
+
+    /**
      * Lee valores de un nodo completo (DO o LN)
      */
     public void readNodeValues(FcModelNode node) throws IOException {
@@ -296,27 +345,155 @@ public class IEC61850Client implements ClientEventListener {
         }
     }
 
+    // ── Mapas de decodificación de enums IEC 61850-7-3 / IEC 61850-7-4 ─────────
+
+    private static final Map<Integer, String> SI_UNIT_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> CTL_MODEL_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> HEALTH_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> MOD_BEH_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> RANGE_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> DIR_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> OR_CATEGORY_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> AUTO_REC_ST_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> FLT_LOOP_MAP = new LinkedHashMap<>();
+
+    static {
+        // IEC 61850-7-3 §20 — códigos de unidad SIUnit
+        SI_UNIT_MAP.put(0,  "none");  SI_UNIT_MAP.put(1,  "m");
+        SI_UNIT_MAP.put(2,  "kg");    SI_UNIT_MAP.put(3,  "s");
+        SI_UNIT_MAP.put(4,  "A");     SI_UNIT_MAP.put(8,  "K");
+        SI_UNIT_MAP.put(11, "deg");   SI_UNIT_MAP.put(21, "Gy");
+        SI_UNIT_MAP.put(23, "°C");    SI_UNIT_MAP.put(25, "F");
+        SI_UNIT_MAP.put(26, "C");     SI_UNIT_MAP.put(27, "S");
+        SI_UNIT_MAP.put(28, "H");     SI_UNIT_MAP.put(29, "V");
+        SI_UNIT_MAP.put(30, "Ω");     SI_UNIT_MAP.put(31, "J");
+        SI_UNIT_MAP.put(32, "N");     SI_UNIT_MAP.put(33, "Hz");
+        SI_UNIT_MAP.put(35, "lm");    SI_UNIT_MAP.put(36, "lx");
+        SI_UNIT_MAP.put(37, "Wb");    SI_UNIT_MAP.put(38, "T");
+        SI_UNIT_MAP.put(61, "VA");    SI_UNIT_MAP.put(62, "W");
+        SI_UNIT_MAP.put(63, "VAr");   SI_UNIT_MAP.put(64, "φ");
+        SI_UNIT_MAP.put(65, "cos(φ)");SI_UNIT_MAP.put(66, "Vs");
+        SI_UNIT_MAP.put(72, "Wh");    SI_UNIT_MAP.put(73, "VAh");
+        SI_UNIT_MAP.put(74, "VArh");  SI_UNIT_MAP.put(75, "V²h");
+        SI_UNIT_MAP.put(76, "A²h");   SI_UNIT_MAP.put(77, "V²");
+        SI_UNIT_MAP.put(78, "A²");
+
+        // ctlModel (IEC 61850-7-3 Table 5)
+        CTL_MODEL_MAP.put(0, "status-only");
+        CTL_MODEL_MAP.put(1, "direct-normal-security");
+        CTL_MODEL_MAP.put(2, "sbo-normal-security");
+        CTL_MODEL_MAP.put(3, "direct-enhanced-security");
+        CTL_MODEL_MAP.put(4, "sbo-enhanced-security");
+
+        // Health (IEC 61850-7-4)
+        HEALTH_MAP.put(1, "Ok");
+        HEALTH_MAP.put(2, "Warning");
+        HEALTH_MAP.put(3, "Alarm");
+
+        // Mod / Beh (IEC 61850-7-4)
+        MOD_BEH_MAP.put(1, "on");
+        MOD_BEH_MAP.put(2, "blocked");
+        MOD_BEH_MAP.put(3, "test");
+        MOD_BEH_MAP.put(4, "test/blocked");
+        MOD_BEH_MAP.put(5, "off");
+
+        // range (IEC 61850-7-3)
+        RANGE_MAP.put(0, "normal");
+        RANGE_MAP.put(1, "high");
+        RANGE_MAP.put(2, "low");
+        RANGE_MAP.put(3, "high-high");
+        RANGE_MAP.put(4, "low-low");
+
+        // dir — dirección de falta (IEC 61850-7-4)
+        DIR_MAP.put(0, "unknown");
+        DIR_MAP.put(1, "forward");
+        DIR_MAP.put(2, "backward");
+        DIR_MAP.put(3, "both");
+
+        // orCategory (IEC 61850-7-3)
+        OR_CATEGORY_MAP.put(0, "not-supported");
+        OR_CATEGORY_MAP.put(1, "bay-control");
+        OR_CATEGORY_MAP.put(2, "station-control");
+        OR_CATEGORY_MAP.put(3, "remote-control");
+        OR_CATEGORY_MAP.put(4, "automatic-bay");
+        OR_CATEGORY_MAP.put(5, "automatic-station");
+        OR_CATEGORY_MAP.put(6, "automatic-remote");
+        OR_CATEGORY_MAP.put(7, "maintenance");
+        OR_CATEGORY_MAP.put(8, "process");
+
+        // AutoRecSt (IEC 61850-7-4)
+        AUTO_REC_ST_MAP.put(1, "Ready");
+        AUTO_REC_ST_MAP.put(2, "InProgress");
+        AUTO_REC_ST_MAP.put(3, "Successful");
+
+        // FltLoop — bucle de falta (IEC 61850-7-4)
+        FLT_LOOP_MAP.put(1, "PhA-Gnd");
+        FLT_LOOP_MAP.put(2, "PhB-Gnd");
+        FLT_LOOP_MAP.put(3, "PhC-Gnd");
+        FLT_LOOP_MAP.put(4, "PhA-PhB");
+        FLT_LOOP_MAP.put(5, "PhB-PhC");
+        FLT_LOOP_MAP.put(6, "PhA-PhC");
+        FLT_LOOP_MAP.put(7, "Others");
+    }
+
     /**
-     * Formatea el valor segun su tipo (igual que la APK)
+     * Formatea el valor segun su tipo, decodificando enumeraciones IEC 61850.
      */
     public String formatValue(ModelNode node) {
         if (node == null) return "null";
-
         try {
-            if (node instanceof BasicDataAttribute) {
-                BasicDataAttribute bda = (BasicDataAttribute) node;
-                return bda.getValueString();
-            }
-
+            // DoubleBitPos tiene su propio formateador
             if (node instanceof BdaDoubleBitPos) {
                 return formatDoubleBitPos((BdaDoubleBitPos) node);
             }
 
-            return node.toString();
+            if (node instanceof BasicDataAttribute) {
+                BasicDataAttribute bda = (BasicDataAttribute) node;
+                String name = node.getName().toLowerCase();
 
+                // Decodificar enums por nombre del DA
+                if (bda instanceof BdaInt8 || bda instanceof BdaInt8U
+                        || bda instanceof BdaInt16 || bda instanceof BdaInt16U) {
+                    int v = getIntValue(bda);
+                    if (name.equals("unit") || name.equals("siunit"))
+                        return decodeEnum(v, SI_UNIT_MAP, bda);
+                    if (name.equals("ctlmodel"))
+                        return decodeEnum(v, CTL_MODEL_MAP, bda);
+                    if (name.equals("health"))
+                        return decodeEnum(v, HEALTH_MAP, bda);
+                    if (name.equals("mod") || name.equals("beh"))
+                        return decodeEnum(v, MOD_BEH_MAP, bda);
+                    if (name.equals("range"))
+                        return decodeEnum(v, RANGE_MAP, bda);
+                    if (name.equals("dir"))
+                        return decodeEnum(v, DIR_MAP, bda);
+                    if (name.equals("orcategory"))
+                        return decodeEnum(v, OR_CATEGORY_MAP, bda);
+                    if (name.equals("autorecst"))
+                        return decodeEnum(v, AUTO_REC_ST_MAP, bda);
+                    if (name.equals("fltloop"))
+                        return decodeEnum(v, FLT_LOOP_MAP, bda);
+                }
+                return bda.getValueString();
+            }
+            return node.toString();
         } catch (Exception e) {
             return "ERROR: " + e.getMessage();
         }
+    }
+
+    private int getIntValue(BasicDataAttribute bda) {
+        if (bda instanceof BdaInt8)   return ((BdaInt8) bda).getValue();
+        if (bda instanceof BdaInt8U)  return ((BdaInt8U) bda).getValue();
+        if (bda instanceof BdaInt16)  return ((BdaInt16) bda).getValue();
+        if (bda instanceof BdaInt16U) return ((BdaInt16U) bda).getValue();
+        if (bda instanceof BdaInt32)  return ((BdaInt32) bda).getValue();
+        return 0;
+    }
+
+    private String decodeEnum(int value, Map<Integer, String> map, BasicDataAttribute bda) {
+        String text = map.get(value);
+        return text != null ? text : bda.getValueString() + "(?)";
     }
 
     /**
@@ -547,22 +724,23 @@ public class IEC61850Client implements ClientEventListener {
                     urcb.getTrgOps().setGeneralInterrogation(true);
                 }
 
-                // Paso 1: escribir trgOps (mientras rptEna = false)
+                // Paso 1: escribir trgOps (con rptEna = false para poder modificarlo)
                 urcb.getRptEna().setValue(false);
                 association.setRcbValues(urcb,
                     false,  // rptId
-                    false,  // datSet  - no modificar, el servidor ya lo tiene configurado
+                    false,  // datSet
                     false,  // rptEna  - aun no habilitar
-                    false,  // optFlds - no modificar
-                    false,  // bufTm   - no modificar
+                    false,  // optFlds
+                    false,  // bufTm
                     false,  // sqNum
-                    true,   // trgOps  - escribir las trigger options
+                    true,   // trgOps
                     false); // intgPd
 
-                // Paso 2: habilitar el reporte
+                // Paso 2: habilitar incluyendo rptId (muchos servidores NRR/NARI exigen
+                // que el cliente escriba rptId junto con rptEna para reclamar ownership)
                 urcb.getRptEna().setValue(true);
                 association.setRcbValues(urcb,
-                    false,  // rptId
+                    true,   // rptId   - escribir para reclamar ownership del URCB
                     false,  // datSet
                     true,   // rptEna  - HABILITAR
                     false,  // optFlds
@@ -571,7 +749,15 @@ public class IEC61850Client implements ClientEventListener {
                     false,  // trgOps
                     false); // intgPd
 
-                System.out.println("[OK] URCB enabled: " + urcb.getName());
+                // Verificar que el servidor realmente habilitó el RCB
+                association.getRcbValues(urcb);
+                boolean actuallyEnabled = urcb.getRptEna() != null && urcb.getRptEna().getValue();
+                System.out.println("[" + (actuallyEnabled ? "OK" : "WARN") + "] URCB " + urcb.getName()
+                    + " → RptEna en servidor = " + actuallyEnabled);
+                if (!actuallyEnabled) {
+                    throw new IOException("El servidor rechazó el enable del URCB: " + urcb.getName()
+                        + " (RptEna sigue false tras setRcbValues)");
+                }
 
             } else if (rcb instanceof Brcb) {
                 Brcb brcb = (Brcb) rcb;
@@ -583,7 +769,7 @@ public class IEC61850Client implements ClientEventListener {
                     brcb.getTrgOps().setGeneralInterrogation(true);
                 }
 
-                // Paso 1: escribir trgOps (mientras rptEna = false)
+                // Paso 1: escribir trgOps
                 brcb.getRptEna().setValue(false);
                 association.setRcbValues(brcb,
                     false,  // rptId
@@ -595,10 +781,10 @@ public class IEC61850Client implements ClientEventListener {
                     true,   // trgOps
                     false); // intgPd
 
-                // Paso 2: habilitar el reporte
+                // Paso 2: habilitar
                 brcb.getRptEna().setValue(true);
                 association.setRcbValues(brcb,
-                    false,  // rptId
+                    true,   // rptId   - escribir para reclamar ownership
                     false,  // datSet
                     true,   // rptEna  - HABILITAR
                     false,  // optFlds
@@ -607,7 +793,15 @@ public class IEC61850Client implements ClientEventListener {
                     false,  // trgOps
                     false); // intgPd
 
-                System.out.println("[OK] BRCB enabled: " + brcb.getName());
+                // Verificar que el servidor realmente habilitó el RCB
+                association.getRcbValues(brcb);
+                boolean actuallyEnabled = brcb.getRptEna() != null && brcb.getRptEna().getValue();
+                System.out.println("[" + (actuallyEnabled ? "OK" : "WARN") + "] BRCB " + brcb.getName()
+                    + " → RptEna en servidor = " + actuallyEnabled);
+                if (!actuallyEnabled) {
+                    throw new IOException("El servidor rechazó el enable del BRCB: " + brcb.getName()
+                        + " (RptEna sigue false tras setRcbValues)");
+                }
             }
 
         } catch (ServiceError e) {
@@ -816,5 +1010,122 @@ public class IEC61850Client implements ClientEventListener {
 
         System.out.println("[OK] Saved to: " + localFile.getAbsolutePath());
         return localFile;
+    }
+
+    // ── Setting Group Control Block (SGCB) ───────────────────────────────────
+
+    /**
+     * Lee los valores actuales del SGCB de un LD dado.
+     * Busca LLN0.SGCB.actSG y LLN0.SGCB.numOfSGs en el modelo.
+     * @param ldName nombre del LD, ej: "LD0"
+     * @return array {actSG, numOfSGs} o null si el SGCB no existe en el modelo
+     */
+    public int[] readSGCBValues(String ldName) {
+        if (serverModel == null) return null;
+        try {
+            int actSg = 1, numSgs = 1;
+            boolean found = false;
+
+            // Buscar el nodo SGCB como FcDataObject bajo LLN0
+            ModelNode lln0 = serverModel.findModelNode(ldName + "/LLN0", null);
+            if (lln0 == null) return null;
+
+            for (ModelNode child : lln0.getChildren()) {
+                if (!"SGCB".equalsIgnoreCase(child.getName())) continue;
+                found = true;
+                // Intentar leer los valores del SGCB
+                if (child instanceof FcModelNode) {
+                    try { association.getDataValues((FcModelNode) child); } catch (Exception ignored) {}
+                }
+                for (ModelNode attr : child.getChildren()) {
+                    String attrName = attr.getName().toLowerCase();
+                    if (attr instanceof FcModelNode) {
+                        try { association.getDataValues((FcModelNode) attr); } catch (Exception ignored) {}
+                    }
+                    if (attr instanceof BasicDataAttribute) {
+                        int val = getIntValue((BasicDataAttribute) attr);
+                        if (attrName.equals("actsg"))   actSg  = val;
+                        if (attrName.equals("numofsgs")) numSgs = val;
+                    }
+                }
+                break;
+            }
+            return found ? new int[]{actSg, numSgs} : null;
+        } catch (Exception e) {
+            System.err.println("[SGCB] Error leyendo " + ldName + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Escribe el grupo activo en SGCB.actSG via setDataValues (SelectActiveSG en MMS).
+     * ADVERTENCIA: cambia el comportamiento de la protección en tiempo real.
+     * @param ldName     nombre del LD, ej: "LD0"
+     * @param groupNumber número de grupo a activar (1..numOfSGs)
+     */
+    public void selectActiveSG(String ldName, int groupNumber) throws IOException {
+        if (!isConnected() || serverModel == null) throw new IOException("Not connected");
+        try {
+            ModelNode lln0 = serverModel.findModelNode(ldName + "/LLN0", null);
+            if (lln0 == null) throw new IOException("LLN0 no encontrado en " + ldName);
+
+            for (ModelNode child : lln0.getChildren()) {
+                if (!"SGCB".equalsIgnoreCase(child.getName())) continue;
+                for (ModelNode attr : child.getChildren()) {
+                    if (!"actsg".equalsIgnoreCase(attr.getName())) continue;
+                    if (attr instanceof BdaInt8U) {
+                        ((BdaInt8U) attr).setValue((short) groupNumber);
+                    } else if (attr instanceof BdaInt8) {
+                        ((BdaInt8) attr).setValue((byte) groupNumber);
+                    }
+                    if (attr instanceof FcModelNode) {
+                        association.setDataValues((FcModelNode) attr);
+                        System.out.println("[SGCB] actSG=" + groupNumber + " escrito en " + ldName);
+                        return;
+                    }
+                }
+                // Si actSG no está como nodo hijo independiente, escribir el SGCB completo
+                if (child instanceof FcModelNode) {
+                    association.setDataValues((FcModelNode) child);
+                    return;
+                }
+            }
+            throw new IOException("SGCB.actSG no encontrado en " + ldName + "/LLN0");
+        } catch (ServiceError e) {
+            throw new IOException("ServiceError SelectActiveSG: " + e.getErrorCode(), e);
+        }
+    }
+
+    // ── Gap 10: FC=BL Blocking ───────────────────────────────────────────────
+
+    /**
+     * Busca el nodo blkEna (FC=BL) de un DO dado su referencia base.
+     * Retorna null si el DO no soporta bloqueo.
+     */
+    public FcModelNode findBlkEnaNode(String doReference) {
+        if (serverModel == null) return null;
+        // Intentar construir ref: doRef.blkEna con Fc.BL
+        try {
+            com.beanit.iec61850bean.ModelNode node =
+                serverModel.findModelNode(doReference + ".blkEna", Fc.BL);
+            if (node instanceof FcModelNode) return (FcModelNode) node;
+        } catch (Exception ignore) {}
+        return null;
+    }
+
+    /**
+     * Activa o desactiva el bloqueo (blkEna) de un DO.
+     * Cuando blkEna=true el IED congela el valor del DO y deja de actualizarlo.
+     */
+    public void setBlocking(FcModelNode blkEnaNode, boolean block) throws IOException {
+        if (association == null) throw new IOException("No conectado");
+        try {
+            if (blkEnaNode instanceof BdaBoolean) {
+                ((BdaBoolean) blkEnaNode).setValue(block);
+            }
+            association.setDataValues(blkEnaNode);
+        } catch (ServiceError e) {
+            throw new IOException("ServiceError setBlocking: " + e.getErrorCode(), e);
+        }
     }
 }
