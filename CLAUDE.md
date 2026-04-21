@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Java desktop application for IEC 61850 protocol exploration and IED (Intelligent Electronic Device) simulation. Functionally similar to OMICRON IEDScout. Developed by Emilio Medina.
+Java desktop application for IEC 61850 protocol exploration and IED (Intelligent Electronic Device) simulation. Developed by Emilio Medina.
 
 Operates in two modes:
 - **Client**: Connects to remote IEDs via MMS/ACSE, discovers models, reads/writes data, monitors values, controls switches/breakers.
