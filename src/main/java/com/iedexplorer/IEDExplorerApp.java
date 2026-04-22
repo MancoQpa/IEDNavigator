@@ -37,6 +37,8 @@ import javax.swing.border.*;
  */
 public class IEDExplorerApp extends JFrame {
 
+    // ─── SECTION: ENUMS & INNER DATA CLASSES ────────────────────────────────────────
+    // TODO-REFACTOR F1: Clases internas extraídas a archivos propios (ver BITACORA)
     // Modo actual
     private enum AppMode { SERVER, CLIENT }
     private AppMode currentMode = AppMode.CLIENT;
@@ -66,23 +68,6 @@ public class IEDExplorerApp extends JFrame {
     // CID descargado del IED
     private byte[] downloadedCidData = null;
     private String downloadedCidFilename = null;
-
-    // Clase para almacenar info de GoCB desde SCL
-    private static class SclGoCB {
-        String ldInst;       // Logical Device
-        String lnClass;      // LN class (usualmente LLN0)
-        String cbName;       // Control block name
-        String appID;        // Application ID
-        String datSet;       // DataSet name
-        int confRev;         // Configuration revision
-        String macAddress;   // Destination MAC
-        String goID;         // GOOSE ID
-
-        @Override
-        public String toString() {
-            return ldInst + "/" + lnClass + "." + cbName;
-        }
-    }
 
     // Componentes GUI principales
     private JRadioButton rbServer, rbClient;
@@ -182,29 +167,6 @@ public class IEDExplorerApp extends JFrame {
     private DefaultTreeModel dataModelTreeModel;
     private JTable dataModelAttrTable;
     private DefaultTableModel dataModelAttrTableModel;
-
-    // Clase para items del monitor
-    private static class MonitorItem {
-        String reference;
-        String name;
-        String fc;
-        String value;
-        String oldValue;  // Para detectar cambios
-        String type;
-        FcModelNode node;
-        long lastChangeTime;
-
-        MonitorItem(String reference, String name, String fc, String type, FcModelNode node) {
-            this.reference = reference;
-            this.name = name;
-            this.fc = fc;
-            this.type = type;
-            this.node = node;
-            this.value = "";
-            this.oldValue = "";
-            this.lastChangeTime = 0;
-        }
-    }
 
     // ===== ICONOS PERSONALIZADOS =====
     private Map<String, Icon> iconCache = new HashMap<>();
@@ -413,6 +375,7 @@ public class IEDExplorerApp extends JFrame {
         };
     }
 
+    // ─── SECTION: ICON INITIALIZATION ───────────────────────────────────────────────
     private void initIcons() {
         // Iconos para estados de breaker
         iconCache.put("breaker_on", createBreakerIcon("on"));
@@ -899,6 +862,8 @@ public class IEDExplorerApp extends JFrame {
         return statusBar;
     }
 
+    // ─── SECTION: PANEL CREATION METHODS ────────────────────────────────────────────
+    // TODO-REFACTOR F4: Cada createXxxPanel() → clase independiente en ui/panels/
     private JPanel createServerPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
@@ -1024,6 +989,7 @@ public class IEDExplorerApp extends JFrame {
         lblWatchlistCount.setText("Watchlist: " + watchlist.size() + " nodos");
     }
 
+    // ─── SECTION: MONITOR PANEL ──────────────────────────────────────────────────────
     private JPanel createMonitorPanel() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
         panel.setBorder(BorderFactory.createTitledBorder("Activity Monitor (Drag & Drop)"));
@@ -1150,6 +1116,7 @@ public class IEDExplorerApp extends JFrame {
         log("Monitor limpiado");
     }
 
+    // ─── SECTION: REPORTS PANEL ──────────────────────────────────────────────────────
     // ==================== REPORTS PANEL (Professional) ====================
     private JPanel createReportsPanel() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
@@ -1554,6 +1521,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: GOOSE PANEL ────────────────────────────────────────────────────────
     // ==================== GOOSE PANEL (Hybrid: libiec61850 + pcap4j fallback) ====================
     private JPanel createGoosePanel() {
         JPanel panel = new JPanel(new BorderLayout(3, 3));
@@ -3235,6 +3203,8 @@ public class IEDExplorerApp extends JFrame {
         return null;
     }
 
+    // ─── SECTION: SCL PARSING ─────────────────────────────────────────────────────────
+    // TODO-REFACTOR F2: Mover métodos parseXxx() → scl/SclFileProcessor.java
     /**
      * Parsea el archivo SCL para extraer GSEControl (GoCBs)
      * Similar a como lo hace IEDScout
@@ -3633,6 +3603,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: SAMPLED VALUES PANEL (DESACTIVADO en versión SIN-SMV) ─────────────
     private JPanel createSampledValuesPanel() {
         JPanel panel = new JPanel(new BorderLayout(3, 3));
         panel.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
@@ -3890,6 +3861,7 @@ public class IEDExplorerApp extends JFrame {
         });
     }
 
+    // ─── SECTION: MONITOR OPERATIONS ─────────────────────────────────────────────────
     private void addNodeToMonitor(DefaultMutableTreeNode treeNode) {
         Object userObj = treeNode.getUserObject();
         if (userObj instanceof NodeInfo) {
@@ -4069,64 +4041,6 @@ public class IEDExplorerApp extends JFrame {
         monitorTable.repaint();
     }
 
-    // Renderer para la tabla del monitor
-    private class MonitorTableRenderer extends DefaultTableCellRenderer {
-        private final Color BG_CHANGED = new Color(255, 255, 200);  // Amarillo claro
-        private final Color FG_ON = new Color(0, 150, 0);
-        private final Color FG_OFF = new Color(200, 0, 0);
-        private final Color FG_INTERMEDIATE = new Color(255, 140, 0);
-        private final Color FG_CHANGED = new Color(0, 100, 200);
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                boolean isSelected, boolean hasFocus, int row, int column) {
-            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-
-            setFont(getFont().deriveFont(Font.PLAIN));
-            setForeground(Color.BLACK);
-            setBackground(isSelected ? table.getSelectionBackground() : Color.WHITE);
-
-            if (value == null) return this;
-            String v = value.toString().toLowerCase();
-
-            // Columna Valor (3)
-            if (column == 3) {
-                if (v.equals("on")) {
-                    setForeground(FG_ON);
-                    setFont(getFont().deriveFont(Font.BOLD));
-                } else if (v.equals("off")) {
-                    setForeground(FG_OFF);
-                    setFont(getFont().deriveFont(Font.BOLD));
-                } else if (v.contains("intermediate") || v.contains("bad")) {
-                    setForeground(FG_INTERMEDIATE);
-                    setFont(getFont().deriveFont(Font.BOLD));
-                }
-            }
-
-            // Columna Estado (4)
-            if (column == 4 && v.equals("changed")) {
-                setForeground(FG_CHANGED);
-                setFont(getFont().deriveFont(Font.BOLD));
-                if (!isSelected) {
-                    setBackground(BG_CHANGED);
-                }
-            }
-
-            // Columna FC (1) - color segun FC
-            if (column == 1) {
-                if (v.equals("st")) {
-                    setForeground(new Color(0, 100, 0));
-                } else if (v.equals("mx")) {
-                    setForeground(new Color(0, 0, 150));
-                } else if (v.equals("co")) {
-                    setForeground(new Color(150, 0, 0));
-                }
-            }
-
-            return this;
-        }
-    }
-
     private void setupListeners() {
         // Cambio de modo
         rbServer.addActionListener(e -> switchToServerMode());
@@ -4192,6 +4106,7 @@ public class IEDExplorerApp extends JFrame {
 
     private JPopupMenu serverPopupMenu;  // Menu para modo servidor
 
+    // ─── SECTION: TREE POPUP & VALUE EDITING ──────────────────────────────────────────
     private void createTreePopupMenu() {
         // === Menu para modo CLIENTE ===
         treePopupMenu = new JPopupMenu();
@@ -4577,6 +4492,8 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: GOOSE-MODEL SYNC (bidireccional) ────────────────────────────────────
+    // Ver CLAUDE.md sección "GOOSE-DataModel Bidirectional Sync Architecture"
     /**
      * Sincroniza los valores del GOOSE publisher unico con los datos del servidor.
      * Recorre los DataSets de los GoCBs y actualiza los valores desde el modelo.
@@ -5034,6 +4951,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: CONNECTION MANAGEMENT ───────────────────────────────────────────────
     private void switchToServerMode() {
         // Si estamos conectados como cliente, desconectar primero
         if (isConnected && client != null) {
@@ -5732,6 +5650,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: POLLING ─────────────────────────────────────────────────────────────
     private void togglePolling() {
         if (cbPolling.isSelected()) {
             startPolling();
@@ -5986,6 +5905,8 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: MODEL TREE BUILDING ─────────────────────────────────────────────────
+    // TODO-REFACTOR F3: Mover buildTree/buildTreeRecursive → ui/tree/ModelTreeBuilder.java
     private void displayServerModel() {
         ServerModel model = server.getServerModel();
         if (model == null) {
@@ -6055,24 +5976,6 @@ public class IEDExplorerApp extends JFrame {
     // Cache para DataSets y Reports parseados del SCL
     private List<SclDataSet> sclDataSets = new ArrayList<>();
     private List<SclReport> sclReports = new ArrayList<>();
-
-    private static class SclDataSet {
-        String ldInst;
-        String lnClass;
-        String name;
-        String desc;
-        List<String> members = new ArrayList<>();
-    }
-
-    private static class SclReport {
-        String ldInst;
-        String lnClass;
-        String name;
-        String rptID;
-        String datSet;
-        boolean buffered;
-        int confRev;
-    }
 
     /**
      * Agrega nodos DataSet al árbol bajo el LD especificado
@@ -6440,31 +6343,9 @@ public class IEDExplorerApp extends JFrame {
         });
     }
 
-    // Clase para almacenar info del nodo en el arbol
-    private static class NodeInfo {
-        String name;
-        String prefix;
-        String fc;
-        String value;
-        String type;
-        ModelNode node;
-        SclGoCB gocb;        // Para nodos GoCB
-        boolean isGocbContainer; // True si es el contenedor "GOOSE"
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("[").append(prefix).append("] ").append(name);
-            if (fc != null && !fc.isEmpty()) {
-                sb.append(" [").append(fc).append("]");
-            }
-            if (value != null && !value.isEmpty()) {
-                sb.append(" = ").append(value);
-            }
-            return sb.toString();
-        }
-    }
-
+    // ─── SECTION: TREE CELL RENDERERS ─────────────────────────────────────────────────
+    // TODO-REFACTOR F1b: ModelTreeCellRenderer y DataModelTreeCellRenderer dependen de
+    // campos externos (iconCache, watchlist) — extraer cuando exista un AppState o Controller
     // Renderer personalizado para el arbol (con iconos y colores)
     private class ModelTreeCellRenderer extends DefaultTreeCellRenderer {
         private final Color WATCHLIST_COLOR = new Color(0, 100, 200);
@@ -6614,6 +6495,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: SETTING GROUPS PANEL ────────────────────────────────────────────────
     // ========== SETTING GROUPS PANEL ==========
     private JPanel createSettingGroupsPanel() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
@@ -6846,6 +6728,7 @@ public class IEDExplorerApp extends JFrame {
             "Editar Setting Group", JOptionPane.INFORMATION_MESSAGE);
     }
 
+    // ─── SECTION: DATASET PANEL ───────────────────────────────────────────────────────
     // ========== DATASET PANEL ==========
     private JPanel createDatasetPanel() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
@@ -7034,6 +6917,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: DATA MODEL PANEL ────────────────────────────────────────────────────
     // ========== DATA MODEL PANEL ==========
     private JPanel createDataModelPanel() {
         JPanel panel = new JPanel(new BorderLayout(5, 5));
@@ -7255,6 +7139,7 @@ public class IEDExplorerApp extends JFrame {
         }
     }
 
+    // ─── SECTION: ENTRY POINT ─────────────────────────────────────────────────────────
     public static void main(String[] args) {
         // Look and Feel
         try {
