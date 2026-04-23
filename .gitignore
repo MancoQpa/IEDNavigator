@@ -48,6 +48,19 @@ SIN SMV/curso nari_cids_ultimo_proyecto/
 SIN SMV/IEDNavigator_Informe_2026-04-23/
 SIN SMV/PROMPT_PRESENTACION_Y_PAPERS.md
 
+# CIDs de equipos de fabricantes (potencialmente propietarios)
+# Solo se incluye test_smoke.cid (genérico, creado por el proyecto)
+SIN SMV/CID/*.cid
+SIN SMV/CID/*.CID
+SIN SMV/CID/*.icd
+SIN SMV/CID/*.ICD
+SIN SMV/CID/*.scd
+SIN SMV/CID/*.SCD
+!SIN SMV/CID/test_smoke.cid
+
+# JNA versión antigua eliminada
+lib/jna-5.13.0.jar
+
 # Documentos personales internos
 Revision_2 (Parcial).docx
 Revision_2 (Parcial).pdf
