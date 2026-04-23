@@ -29,6 +29,7 @@ installer/download_cache/
 # Binarios y ejecutables de terceros
 *.exe
 *.dll
+!lib/*.dll
 *.lnk
 PcapDotNet.Core.dll
 
@@ -37,7 +38,15 @@ requisistos ied_navigator/
 
 # Logs y temporales
 *.log
+*.txt
+!README.txt
 MMS_log_file.txt
+SIN SMV/log*/
+
+# Carpetas personales / terceros
+SIN SMV/curso nari_cids_ultimo_proyecto/
+SIN SMV/IEDNavigator_Informe_2026-04-23/
+SIN SMV/PROMPT_PRESENTACION_Y_PAPERS.md
 
 # Documentos personales internos
 Revision_2 (Parcial).docx

@@ -11,20 +11,21 @@ if (!(Test-Path $CLASSDIR)) { New-Item -ItemType Directory -Path $CLASSDIR }
 $jars = Get-ChildItem -Path $LIBDIR -Filter '*.jar' | ForEach-Object { $_.FullName }
 $CP = $jars -join ';'
 
+# Collect all .java files recursively
+$sources = Get-ChildItem -Path $SRCDIR -Recurse -Filter '*.java' | ForEach-Object { $_.FullName }
+
 Write-Host "Compiling Java files..."
 Write-Host "JAVA_HOME: $env:JAVA_HOME"
 Write-Host "Classpath has $($jars.Count) jars"
+Write-Host "Source files: $($sources.Count)"
 
-& $JAVAC -d $CLASSDIR -cp $CP -encoding UTF-8 `
-    "$SRCDIR\com\iedexplorer\native_lib\LibIec61850.java" `
-    "$SRCDIR\com\iedexplorer\native_lib\NativeGooseSubscriber.java" `
-    "$SRCDIR\com\iedexplorer\native_lib\NativeSVSubscriber.java" `
-    "$SRCDIR\com\iedexplorer\GooseSubscriber.java" `
-    "$SRCDIR\com\iedexplorer\GoosePublisher.java" `
-    "$SRCDIR\com\iedexplorer\GooseUdpBridge.java" `
-    "$SRCDIR\com\iedexplorer\IEC61850Client.java" `
-    "$SRCDIR\com\iedexplorer\IEC61850Server.java" `
-    "$SRCDIR\com\iedexplorer\IEDExplorerApp.java" 2>&1
+# Write @argfile to avoid command-line length limits (ASCII sin BOM — javac lo requiere)
+$argfile = "$env:TEMP\ied_sources.txt"
+$sources | ForEach-Object { '"' + ($_ -replace '\\', '/') + '"' } | Out-File -FilePath $argfile -Encoding ascii
+
+& $JAVAC -d $CLASSDIR -cp $CP -encoding UTF-8 "@$argfile" 2>&1
+
+Remove-Item $argfile -ErrorAction SilentlyContinue
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Compilation successful!"
