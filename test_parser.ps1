@@ -30,4 +30,4 @@ Write-Host "Running SCL Parser Test..."
 Write-Host ""
 
 $CP_RUN = "$CLASSDIR;" + ($jars -join ';')
-& $JAVA -cp $CP_RUN com.iedexplorer.SclParserTest $SclFile 2>&1
+& $JAVA -cp $CP_RUN com.iednavigator.SclParserTest $SclFile 2>&1

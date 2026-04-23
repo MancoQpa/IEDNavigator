@@ -4,8 +4,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.iedexplorer</groupId>
-    <artifactId>iec61850-explorer</artifactId>
+    <groupId>com.iednavigator</groupId>
+    <artifactId>ied-navigator</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
@@ -53,7 +53,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.iedexplorer.IEDExplorerApp</mainClass>
+                            <mainClass>com.iednavigator.IEDNavigatorApp</mainClass>
                             <addClasspath>true</addClasspath>
                             <classpathPrefix>lib/</classpathPrefix>
                         </manifest>
@@ -87,7 +87,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.iedexplorer.IEDExplorerApp</mainClass>
+                            <mainClass>com.iednavigator.IEDNavigatorApp</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>

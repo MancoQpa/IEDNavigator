@@ -25,7 +25,7 @@ Additionally supports GOOSE messaging (publish/subscribe), Sampled Values (SV/SM
 
 ```
 src/main/java/com/iedexplorer/
-  IEDExplorerApp.java       # Main GUI (~6600 lines) - Entry point, 3-panel layout
+  IEDNavigatorApp.java       # Main GUI (~6600 lines) - Entry point, 3-panel layout
   IEC61850Client.java        # MMS client, model discovery, polling, control
   IEC61850Server.java        # IED simulation from SCL files
   GoosePublisher.java        # GOOSE message publishing via pcap4j
@@ -48,7 +48,7 @@ installer/                   # Distribution packaging scripts and outputs
 mvn clean package -DskipTests
 
 # Run
-java --enable-native-access=ALL-UNNAMED -Djna.library.path=lib -jar target/iec61850-explorer-1.0.0-jar-with-dependencies.jar
+java --enable-native-access=ALL-UNNAMED -Djna.library.path=lib -jar target/ied-navigator-1.0.0-jar-with-dependencies.jar
 
 # Alternative: batch scripts
 build.bat        # Compiles
@@ -56,13 +56,13 @@ run.bat          # Runs
 START.bat        # Smart startup with dependency checks
 ```
 
-Maven artifact: `com.iedexplorer:iec61850-explorer:1.0.0`
-Main class: `com.iedexplorer.IEDExplorerApp`
+Maven artifact: `com.iednavigator:ied-navigator:1.0.0`
+Main class: `com.iednavigator.IEDNavigatorApp`
 
 ## Architecture Notes
 
-- **Single-package design**: All classes in `com.iedexplorer` (no sub-packages except `native_lib`).
-- **IEDExplorerApp.java is monolithic**: Contains the entire Swing GUI, event handling, tab management, and coordinates client/server. This is the largest file (~6600 lines).
+- **Single-package design**: All classes in `com.iednavigator` (no sub-packages except `native_lib`).
+- **IEDNavigatorApp.java is monolithic**: Contains the entire Swing GUI, event handling, tab management, and coordinates client/server. This is the largest file (~6600 lines).
 - **Listener/callback patterns**: Client and Server use listener interfaces to notify the GUI of events (connections, value changes, errors).
 - **CachedValue**: Inner class in IEC61850Client for tracking attribute values with timestamps.
 - **Dual native strategy**: Java-based pcap4j for basic GOOSE + JNA bindings to libiec61850.dll for advanced GOOSE/SV features.
@@ -89,7 +89,7 @@ Main class: `com.iedexplorer.IEDExplorerApp`
 ## Common Tasks
 
 - **Add new data type formatting**: Modify `formatValue()` / `formatQuality()` in `IEC61850Client.java`.
-- **Modify GUI layout/tabs**: Edit `IEDExplorerApp.java` (search for panel/tab creation methods).
+- **Modify GUI layout/tabs**: Edit `IEDNavigatorApp.java` (search for panel/tab creation methods).
 - **Add new protocol features**: Extend `IEC61850Client.java` or `IEC61850Server.java`.
 - **Modify GOOSE behavior**: Edit `GoosePublisher.java` / `GooseSubscriber.java`.
 - **Native library integration**: Work in `native_lib/` package, update JNA interfaces in `LibIec61850.java`.
@@ -110,7 +110,7 @@ When a value is changed from "GoCBs del Modelo" (right-click context menu), it p
 2. Then calls `syncPublisherToServerModel(gcbIndex, dataIndex)` to write back to server model
 3. Server model update triggers tree/monitor refresh via `updateServerTreeValues()` / `updateServerMonitorValues()`
 
-### Key helper methods (in `IEDExplorerApp.java`):
+### Key helper methods (in `IEDNavigatorApp.java`):
 - `buildModelRefFromFCDA(member)` - Converts FCDA string (`ldInst/LN.DO.DA [FC]`) to iec61850bean reference (`IEDNameLDInst/LN.DO.DA`) using `loadedIedName`
 - `extractFcFromMember(member)` - Extracts Functional Constraint from `[FC]` suffix
 - `convertBdaToPublisherValue(bda, targetType)` - Converts BDA value to GoosePublisher DataValue type (forward)
@@ -124,5 +124,5 @@ The `loadedIedName` field stores the IED name from the SCL file, set during `par
 
 - GOOSE Layer 2 multicast has limitations on Windows (noted in documentation).
 - Connection timeout is hardcoded at 10 seconds in the client.
-- The main GUI file (IEDExplorerApp.java) is very large and could benefit from decomposition.
+- The main GUI file (IEDNavigatorApp.java) is very large and could benefit from decomposition.
 - JNA library has two versions in lib/ (5.13.0 and 5.14.0) - potential classpath conflict.

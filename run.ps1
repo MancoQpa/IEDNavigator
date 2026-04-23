@@ -8,4 +8,4 @@ $jars = Get-ChildItem -Path $LIBDIR -Filter '*.jar' | ForEach-Object { $_.FullNa
 $CP = "$CLASSDIR;" + ($jars -join ';')
 
 Write-Host "Starting IED Scout Java..."
-& $JAVA --enable-native-access=ALL-UNNAMED -cp $CP com.iedexplorer.IEDExplorerApp 2>&1
+& $JAVA --enable-native-access=ALL-UNNAMED -cp $CP com.iednavigator.IEDNavigatorApp 2>&1

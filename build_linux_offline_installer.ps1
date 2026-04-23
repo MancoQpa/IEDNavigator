@@ -72,7 +72,7 @@ if (-not $SkipCompile) {
 }
 
 # ── Verificar clases ──────────────────────────────────────────────────────────
-$MainClass = Join-Path $ClassDir "com\iedexplorer\IEDExplorerApp.class"
+$MainClass = Join-Path $ClassDir "com\iedexplorer\IEDNavigatorApp.class"
 if (-not (Test-Path $MainClass)) {
     Fail "Clases no encontradas en '$ClassDir'.`nEjecute compile.ps1 o use -SkipCompile."
 }

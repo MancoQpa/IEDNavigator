@@ -68,7 +68,7 @@ set "CP=classes"
 for %%j in (lib\*.jar) do set "CP=!CP!;%%j"
 
 :: Run
-"%JAVA_EXE%" --enable-native-access=ALL-UNNAMED -Djna.library.path="%~dp0lib" -cp "%CP%" com.iedexplorer.IEDExplorerApp
+"%JAVA_EXE%" --enable-native-access=ALL-UNNAMED -Djna.library.path="%~dp0lib" -cp "%CP%" com.iednavigator.IEDNavigatorApp
 
 if %ERRORLEVEL% neq 0 (
     echo.

@@ -75,7 +75,7 @@ exit /b 1
 echo Iniciando IED Navigator...
 set "CP=classes"
 for %%j in (lib\*.jar) do set "CP=!CP!;%%j"
-"%JAVA_EXE%" --enable-native-access=ALL-UNNAMED -Djna.library.path="%~dp0lib" -cp "%CP%" com.iedexplorer.IEDExplorerApp %*
+"%JAVA_EXE%" --enable-native-access=ALL-UNNAMED -Djna.library.path="%~dp0lib" -cp "%CP%" com.iednavigator.IEDNavigatorApp %*
 if %errorlevel% neq 0 ( echo La aplicacion termino con errores. & pause )
 "@ | Out-File -FilePath "$WinDir\IEDNavigator.bat" -Encoding ASCII
 
@@ -223,7 +223,7 @@ done
 
 # Run (use sudo for raw packet capture if needed)
 if [ "`$(id -u)" -eq 0 ]; then
-    "`$JAVA_EXE" --enable-native-access=ALL-UNNAMED -Djna.library.path="`$SCRIPT_DIR/lib" -cp "`$CP" com.iedexplorer.IEDExplorerApp "`$@"
+    "`$JAVA_EXE" --enable-native-access=ALL-UNNAMED -Djna.library.path="`$SCRIPT_DIR/lib" -cp "`$CP" com.iednavigator.IEDNavigatorApp "`$@"
 else
     echo ""
     echo "NOTA: Para captura GOOSE ejecute con sudo:"
@@ -231,7 +231,7 @@ else
     echo ""
     echo "Iniciando sin privilegios (captura GOOSE puede no funcionar)..."
     echo ""
-    "`$JAVA_EXE" --enable-native-access=ALL-UNNAMED -Djna.library.path="`$SCRIPT_DIR/lib" -cp "`$CP" com.iedexplorer.IEDExplorerApp "`$@"
+    "`$JAVA_EXE" --enable-native-access=ALL-UNNAMED -Djna.library.path="`$SCRIPT_DIR/lib" -cp "`$CP" com.iednavigator.IEDNavigatorApp "`$@"
 fi
 "@ | Out-File -FilePath "$LinDir\iednavigator.sh" -Encoding UTF8 -NoNewline
 
@@ -377,7 +377,7 @@ JAVA_FILES=(
     "`$SRCDIR/com/iedexplorer/GooseUdpBridge.java"
     "`$SRCDIR/com/iedexplorer/IEC61850Client.java"
     "`$SRCDIR/com/iedexplorer/IEC61850Server.java"
-    "`$SRCDIR/com/iedexplorer/IEDExplorerApp.java"
+    "`$SRCDIR/com/iedexplorer/IEDNavigatorApp.java"
 )
 
 javac -d "`$CLASSDIR" -cp "`$CP" -encoding UTF-8 "`${JAVA_FILES[@]}" 2>&1

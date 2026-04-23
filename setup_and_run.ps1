@@ -136,6 +136,6 @@ Write-Host "Iniciando aplicacion..."
 Write-Host "==================================="
 
 $runCp = "`"$baseDir\$classDir;$cp`""
-$javaCmd = "& $java -cp $runCp com.iedexplorer.IEDExplorerApp"
+$javaCmd = "& $java -cp $runCp com.iednavigator.IEDNavigatorApp"
 
 Invoke-Expression $javaCmd

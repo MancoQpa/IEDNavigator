@@ -59,7 +59,7 @@ del /q "%CLASSDIR%\*.class" 2>nul
 rd /s /q "%CLASSDIR%\com" 2>nul
 
 :: Compilar
-"%JAVAC%" -d "%CLASSDIR%" -cp "%CP%" -encoding UTF-8 "%SRCDIR%\com\iedexplorer\IEC61850Client.java" "%SRCDIR%\com\iedexplorer\IEC61850Server.java" "%SRCDIR%\com\iedexplorer\IEDExplorerApp.java"
+"%JAVAC%" -d "%CLASSDIR%" -cp "%CP%" -encoding UTF-8 "%SRCDIR%\com\iedexplorer\IEC61850Client.java" "%SRCDIR%\com\iedexplorer\IEC61850Server.java" "%SRCDIR%\com\iedexplorer\IEDNavigatorApp.java"
 
 if %ERRORLEVEL% NEQ 0 (
     echo.
@@ -76,6 +76,6 @@ echo ===================================
 echo.
 
 :: Ejecutar
-"%JAVA%" -cp "%CLASSDIR%;%CP%" com.iedexplorer.IEDExplorerApp
+"%JAVA%" -cp "%CLASSDIR%;%CP%" com.iednavigator.IEDNavigatorApp
 
 pause
