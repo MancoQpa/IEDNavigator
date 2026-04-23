@@ -47,6 +47,9 @@ SIN SMV/log*/
 SIN SMV/curso nari_cids_ultimo_proyecto/
 SIN SMV/IEDNavigator_Informe_2026-04-23/
 SIN SMV/PROMPT_PRESENTACION_Y_PAPERS.md
+SIN SMV/PROMPT_PRESENTACION_IEDNavigator.txt
+SIN SMV/*.pdf
+SIN SMV/gen_*.py
 
 # CIDs de equipos de fabricantes (potencialmente propietarios)
 # Solo se incluye test_smoke.cid (genérico, creado por el proyecto)
