@@ -458,14 +458,14 @@ public class IEDNavigatorApp extends JFrame {
             "<li>Monitoreo de datos en tiempo real</li>" +
             "<li>Reports (URCB/BRCB)</li>" +
             "<li>GOOSE Subscriber/Publisher</li>" +
-            "<li><b>Sampled Values (SMV)</b> - via libiec61850</li>" +
             "<li>Carga y descarga de archivos SCL/CID</li>" +
             "</ul>" +
             "<p style='font-size: 10px;'>" + nativeStatus + "</p>" +
             "<hr style='margin: 10px 0;'>" +
             "<p><b>Desarrollado por:</b></p>" +
             "<p style='color: #2E86AB; font-size: 13px;'><b>Emilio Medina</b></p>" +
-            "<p style='font-size: 11px;'>Técnico Superior en Electrónica</p>" +
+            "<p style='font-size: 11px;'>T\u00e9cnico Superior en Electr\u00f3nica</p>" +
+            "<p style='font-size: 11px;'>\uD83C\uDDF5\uD83C\uDDFE Paraguay</p>" +
             "<br>" +
             "<p style='color: #888; font-size: 10px;'>" +
             "Bibliotecas: iec61850bean (MMS), libiec61850 (GOOSE/SV), pcap4j, JNA<br>" +
