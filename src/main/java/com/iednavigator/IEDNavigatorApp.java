@@ -361,7 +361,8 @@ public class IEDNavigatorApp extends JFrame {
         rightTabbedPane.addTab("Setting Groups",
             new SettingGroupsPanel(this, this::log, panelModelSupplier, panelClientSupplier, backgroundExecutor).createPanel());
         rightTabbedPane.addTab("Dataset",
-            new DatasetPanel(this, this::log, panelModelSupplier).createPanel());
+            new DatasetPanel(this, this::log, panelModelSupplier,
+                this::navigateToFcdaInModel).createPanel());
         rightTabbedPane.addTab("Data Model",
             new DataModelPanel(this, this::log, panelModelSupplier, iconCache).createPanel());
         rightTabbedPane.setTabPlacement(JTabbedPane.TOP);

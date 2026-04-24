@@ -18,16 +18,19 @@ class DatasetPanel {
     private final Component parent;
     private final Consumer<String> log;
     private final Supplier<ServerModel> modelSupplier;
+    private final Consumer<String> onNavigate;   // called with the member reference when user clicks a row
 
     private JTable datasetTable;
     private DefaultTableModel datasetTableModel;
     private JTable datasetMembersTable;
     private DefaultTableModel datasetMembersTableModel;
 
-    DatasetPanel(Component parent, Consumer<String> log, Supplier<ServerModel> modelSupplier) {
+    DatasetPanel(Component parent, Consumer<String> log, Supplier<ServerModel> modelSupplier,
+                 Consumer<String> onNavigate) {
         this.parent = parent;
         this.log = log;
         this.modelSupplier = modelSupplier;
+        this.onNavigate = onNavigate;
     }
 
     JPanel createPanel() {
@@ -67,8 +70,21 @@ class DatasetPanel {
             public boolean isCellEditable(int row, int column) { return false; }
         };
         datasetMembersTable = new JTable(datasetMembersTableModel);
+        datasetMembersTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        datasetMembersTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && onNavigate != null) {
+                int row = datasetMembersTable.getSelectedRow();
+                if (row >= 0) {
+                    String ref = (String) datasetMembersTableModel.getValueAt(row, 1);
+                    if (ref != null && !ref.isEmpty()) {
+                        onNavigate.accept(ref);
+                    }
+                }
+            }
+        });
         JScrollPane memberScroll = new JScrollPane(datasetMembersTable);
-        memberScroll.setBorder(BorderFactory.createTitledBorder("Miembros del Dataset"));
+        memberScroll.setBorder(BorderFactory.createTitledBorder(
+            "Miembros del Dataset  (clic en una fila → navegar en árbol)"));
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, dsScroll, memberScroll);
         splitPane.setDividerLocation(200);

@@ -4,7 +4,7 @@
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Version = "2.1"
+$Version = "3.0"
 $OutputName = "IEDNavigator_v${Version}_Setup"
 $TempDir = "$ProjectRoot\temp_installer"
 $AppDir = "$TempDir\IEDNavigator"
