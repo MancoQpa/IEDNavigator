@@ -1,7 +1,7 @@
 # IEDNavigator v3.0-edu
 
 Herramienta de escritorio Java para exploracion y simulacion del protocolo **IEC 61850**.
-Funcionalmente similar a OMICRON IEDScout. De uso libre bajo licencia GPL v3.
+Funcionalmente similar a cualquier herramientade exploración de ieds. De uso libre bajo licencia GPL v3.
 
 Desarrollado por **Emilio Medina**.
 
