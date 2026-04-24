@@ -1079,6 +1079,12 @@ public class IEDNavigatorApp extends JFrame {
             public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) {}
         });
 
+        treePopupMenu.addSeparator();
+        JMenuItem miInfo = new JMenuItem("❓ ¿Qué es esto? (IEC 61850)");
+        miInfo.setFont(miInfo.getFont().deriveFont(Font.BOLD));
+        miInfo.addActionListener(e -> showDictionaryForSelectedNode());
+        treePopupMenu.add(miInfo);
+
         // === Menu para modo SERVIDOR se construye dinamicamente ===
         serverPopupMenu = new JPopupMenu();
     }
@@ -1172,6 +1178,12 @@ public class IEDNavigatorApp extends JFrame {
         JMenuItem miPublishGoose = new JMenuItem("Publicar GOOSE (cambio de estado)");
         miPublishGoose.addActionListener(e -> publishGooseFromSelection());
         serverPopupMenu.add(miPublishGoose);
+
+        serverPopupMenu.addSeparator();
+        JMenuItem miInfoSrv = new JMenuItem("❓ ¿Qué es esto? (IEC 61850)");
+        miInfoSrv.setFont(miInfoSrv.getFont().deriveFont(Font.BOLD));
+        miInfoSrv.addActionListener(e -> showDictionaryForSelectedNode());
+        serverPopupMenu.add(miInfoSrv);
     }
 
     private void handleTreePopup(MouseEvent e) {
@@ -1221,6 +1233,12 @@ public class IEDNavigatorApp extends JFrame {
                     }
                 }
 
+                fcdaPopup.addSeparator();
+                JMenuItem miInfoFcda = new JMenuItem("❓ ¿Qué es esto? (IEC 61850)");
+                miInfoFcda.setFont(miInfoFcda.getFont().deriveFont(Font.BOLD));
+                miInfoFcda.addActionListener(ev -> showDictionaryForSelectedNode());
+                fcdaPopup.add(miInfoFcda);
+
                 fcdaPopup.show(modelTree, e.getX(), e.getY());
                 return;
             }
@@ -1238,6 +1256,23 @@ public class IEDNavigatorApp extends JFrame {
     // F22: tree navigation — delegado a ModelTreeBuilder.java
     private void navigateToFcdaInModel(String fcdaName) {
         ModelTreeBuilder.navigateToFcdaInModel(modelTree, fcdaName, this::log, this::logGoose);
+    }
+
+    /** Muestra el diálogo educativo IEC 61850 para el nodo actualmente seleccionado en el árbol. */
+    private void showDictionaryForSelectedNode() {
+        TreePath path = modelTree.getSelectionPath();
+        if (path == null) return;
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+        Object userObj = node.getUserObject();
+        String name = (userObj instanceof NodeInfo) ? ((NodeInfo) userObj).name : node.toString();
+        // Para nodos FCDA el name tiene formato "[1] LD/LN.DO [FC]" — extraer token DO/DA
+        if (name != null && name.contains("]")) {
+            String after = name.substring(name.lastIndexOf(']') + 1).trim();
+            // Tomar el último segmento después del punto o la barra
+            String[] parts = after.replaceAll("\\[.*?\\]", "").trim().split("[./]");
+            if (parts.length > 0) name = parts[parts.length - 1].trim();
+        }
+        Iec61850Dictionary.showInfoDialog(this, name != null ? name : "");
     }
 
     private DefaultMutableTreeNode findNodeInModel(String fcdaName) {
