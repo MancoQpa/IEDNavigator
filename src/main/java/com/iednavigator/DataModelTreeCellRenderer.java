@@ -33,14 +33,8 @@ class DataModelTreeCellRenderer extends DefaultTreeCellRenderer {
                         setIcon(iconCache.get("ld"));
                         break;
                     case "LN":
-                        String name = info.node.getName().toUpperCase();
-                        if (name.startsWith("XCBR") || name.startsWith("XSWI")) {
-                            setIcon(iconCache.get("ln_xcbr"));
-                        } else if (name.startsWith("MMXU") || name.startsWith("MMTR")) {
-                            setIcon(iconCache.get("ln_mmxu"));
-                        } else {
-                            setIcon(iconCache.get("ln_default"));
-                        }
+                        setIcon(ModelTreeCellRenderer.lnIcon(
+                                info.node.getName().toUpperCase(), iconCache));
                         break;
                     case "DO":
                         setIcon(iconCache.get("do"));

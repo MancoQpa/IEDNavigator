@@ -434,6 +434,9 @@ public class IEDNavigatorApp extends JFrame {
         JMenuItem miAbout = new JMenuItem("Acerca de...");
         miAbout.addActionListener(e -> showAboutDialog());
         menuHelp.add(miAbout);
+        JMenuItem miLegend = new JMenuItem("Leyenda de íconos y colores...");
+        miLegend.addActionListener(e -> showLegendDialog());
+        menuHelp.add(miLegend);
         menuBar.add(menuHelp);
 
         return menuBar;
@@ -475,6 +478,127 @@ public class IEDNavigatorApp extends JFrame {
 
         JOptionPane.showMessageDialog(this, message, "Acerca de IED Navigator",
             JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showLegendDialog() {
+        JPanel main = new JPanel();
+        main.setLayout(new BoxLayout(main, BoxLayout.Y_AXIS));
+        main.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
+
+        // ── Sección: Tipos de nodo ──────────────────────────────────────────
+        main.add(legendTitle("Tipos de nodo en el árbol"));
+        main.add(legendRow(IconFactory.createNodeIcon("LD", new Color(100,100,200)),
+                "<b>LD</b> — Logical Device (Dispositivo Lógico)"));
+        main.add(legendRow(IconFactory.createNodeIcon("DO", new Color(150,150,200)),
+                "<b>DO</b> — Data Object (Objeto de Datos)"));
+        main.add(legendRow(IconFactory.createCircleIcon(new Color(100,180,100), 14),
+                "<b>DA / BDA</b> — Data Attribute (Atributo de Dato)"));
+        main.add(Box.createVerticalStrut(8));
+
+        // ── Sección: Nodos lógicos por grupo ──────────────────────────────
+        main.add(legendTitle("Nodos Lógicos (LN) por grupo IEC 61850-7-4"));
+        main.add(legendRow(IconFactory.createNodeIcon("LN", new Color(200, 50, 50)),
+                "<b>Grupo X</b> — Equipos de corte: XCBR (disyuntor)"));
+        main.add(legendRow(IconFactory.createNodeIcon("LN", new Color(200,100, 50)),
+                "<b>Grupo X / C</b> — Seccionadores y control: XSWI, CSWI, CILO"));
+        main.add(legendRow(IconFactory.createNodeIcon("LN", new Color(150,100,200)),
+                "<b>Grupo C</b> — Control: CPOW, CPDM y otros"));
+        main.add(legendRow(IconFactory.createMeterIcon(new Color(0,100,200)),
+                "<b>Grupo M</b> — Medición: MMXU, MSQI, MHAI (medidor azul)"));
+        main.add(legendRow(IconFactory.createMeterIcon(new Color(0,150,100)),
+                "<b>Grupo M</b> — Energía y demanda: MMTR, MSTA (medidor verde)"));
+        main.add(legendRow(IconFactory.createShieldIcon(new Color(180,30,30)),
+                "<b>Grupo P</b> — Protección: PDIS, PDIF, PTRC, PDIR…"));
+        main.add(legendRow(IconFactory.createShieldIcon(new Color(130,30,170)),
+                "<b>Grupo R</b> — Funciones relacionadas con protección: RREC, RPSB, RSYN…"));
+        main.add(legendRow(IconFactory.createGearIcon(new Color(0,150,170)),
+                "<b>Grupo A</b> — Control automático: ATCC, ARCO, ARIS…"));
+        main.add(legendRow(IconFactory.createDiamondIcon(new Color(70,70,70)),
+                "<b>Grupo L</b> — Nodos de sistema: LLN0 (nodo cero), LPHD (salud del IED)"));
+        main.add(legendRow(IconFactory.createDiamondIcon(new Color(90,90,90)),
+                "<b>Grupo G</b> — Genérico: GAPC, GGIO"));
+        main.add(legendRow(IconFactory.createMeterIcon(new Color(20,140,120)),
+                "<b>Grupo S</b> — Supervisión y sensores: STMP, SARC, SIMG…"));
+        main.add(legendRow(IconFactory.createMeterIcon(new Color(140,80,0)),
+                "<b>Grupo T</b> — Transformadores de instrumento: TCTR, TVTR"));
+        main.add(legendRow(IconFactory.createNodeIcon("LN", new Color(50,90,200)),
+                "<b>Grupo I</b> — Interfaz: IHMI, ITCI, ITMI…"));
+        main.add(legendRow(IconFactory.createNodeIcon("LN", new Color(80,80,150)),
+                "<b>Grupo Z</b> — Otros equipos de potencia: ZAXN, ZBAT…"));
+        main.add(legendRow(IconFactory.createNodeIcon("LN", new Color(100,150,100)),
+                "<b>Sin clasificar</b> — LN con nombre personalizado de fabricante no reconocido"));
+        main.add(Box.createVerticalStrut(8));
+
+        // ── Sección: Estados de disyuntor ──────────────────────────────────
+        main.add(legendTitle("Estados de disyuntor (DA stVal)"));
+        main.add(legendRow(IconFactory.createBreakerIcon("on"),
+                "<b>Cerrado / ON</b> — Contacto cerrado (valor 2)"));
+        main.add(legendRow(IconFactory.createBreakerIcon("off"),
+                "<b>Abierto / OFF</b> — Contacto abierto (valor 1)"));
+        main.add(legendRow(IconFactory.createBreakerIcon("intermediate"),
+                "<b>Intermedio / Transitorio</b> — Estado indefinido (valor 0 o 3)"));
+        main.add(Box.createVerticalStrut(8));
+
+        // ── Sección: Colores de texto ──────────────────────────────────────
+        main.add(legendTitle("Colores de texto en el árbol"));
+        main.add(legendColorRow(new Color(0,150,0),
+                "Verde — Valor activo: ON, OK, CLOSED, TRUE"));
+        main.add(legendColorRow(new Color(200,0,0),
+                "Rojo — Valor inactivo: OFF, ALARM, OPEN, FALSE"));
+        main.add(legendColorRow(new Color(255,140,0),
+                "Naranja — Advertencia: INTERMEDIATE, BAD, WARNING, TEST"));
+        main.add(legendColorRow(new Color(120,80,180),
+                "Violeta — Nodo bloqueado (FC=BL, blkEna=true)"));
+        main.add(legendColorRow(new Color(0,100,200),
+                "Azul — Nodo en Watchlist (monitoreo activo)"));
+
+        JScrollPane scroll = new JScrollPane(main);
+        scroll.setPreferredSize(new java.awt.Dimension(500, 520));
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setBorder(null);
+
+        JDialog dlg = new JDialog(this, "Leyenda de íconos y colores — IED Navigator", true);
+        dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dlg.add(scroll);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    /** Título de sección para el diálogo de leyenda. */
+    private static JLabel legendTitle(String text) {
+        JLabel lbl = new JLabel("<html><b style='font-size:11px;color:#2E86AB;'>" + text + "</b></html>");
+        lbl.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(180,210,240)),
+            BorderFactory.createEmptyBorder(6, 0, 3, 0)));
+        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return lbl;
+    }
+
+    /** Fila de ícono + descripción para el diálogo de leyenda. */
+    private static JPanel legendRow(Icon icon, String html) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel iconLbl = new JLabel(icon);
+        iconLbl.setPreferredSize(new java.awt.Dimension(20, 18));
+        row.add(iconLbl);
+        row.add(new JLabel("<html>" + html + "</html>"));
+        return row;
+    }
+
+    /** Fila de color de texto + descripción para el diálogo de leyenda. */
+    private static JPanel legendColorRow(Color color, String description) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel sample = new JLabel("■ Abc");
+        sample.setForeground(color);
+        sample.setFont(sample.getFont().deriveFont(Font.BOLD, 12f));
+        sample.setPreferredSize(new java.awt.Dimension(52, 18));
+        row.add(sample);
+        row.add(new JLabel(description));
+        return row;
     }
 
     private void loadSclForGoCBs() {
@@ -1084,6 +1208,9 @@ public class IEDNavigatorApp extends JFrame {
         miInfo.setFont(miInfo.getFont().deriveFont(Font.BOLD));
         miInfo.addActionListener(e -> showDictionaryForSelectedNode());
         treePopupMenu.add(miInfo);
+        JMenuItem miLegendTree = new JMenuItem("📖 Leyenda de íconos y colores...");
+        miLegendTree.addActionListener(e -> showLegendDialog());
+        treePopupMenu.add(miLegendTree);
 
         // === Menu para modo SERVIDOR se construye dinamicamente ===
         serverPopupMenu = new JPopupMenu();

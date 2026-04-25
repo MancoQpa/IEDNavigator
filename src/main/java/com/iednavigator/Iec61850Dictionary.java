@@ -1118,10 +1118,40 @@ class Iec61850Dictionary {
         if ((e = DICT.get(name.toUpperCase())) != null) return e;
         // Sin dígitos + mayúsculas
         if (!noDigits.equals(name) && (e = DICT.get(noDigits.toUpperCase())) != null) return e;
-        // Intentar extraer el prefijo LN (primeras 4 letras del patrón XCBR)
-        if (name.length() >= 4) {
-            String prefix4 = name.substring(0, 4).toUpperCase();
-            if ((e = DICT.get(prefix4)) != null) return e;
+        // ── Inferencia por sufijo para nombres con prefijo de fabricante ────────
+        // Algunos fabricantes extienden el nombre del LN con un prefijo propio:
+        //   "BK1AXCBR1" → prefijo "BK1A", clase "XCBR", instancia "1"
+        //   "DC7CILO7"  → prefijo "DC7",  clase "CILO",  instancia "7"
+        //   "OSB1RPSB2" → prefijo "OSB1", clase "RPSB",  instancia "2"
+        //   "R32PRDIR6" → prefijo "R32",  clase "PRDIR", instancia "6"
+        //
+        // Algoritmo: eliminar dígitos al final, luego probar sufijos del nombre base
+        // de mayor a menor longitud. Solo se acepta si la entrada es LOGICAL_NODE.
+        String base = name.toUpperCase().replaceAll("\\d+$", ""); // "BK1AXCBR"
+        for (int start = 0; start < base.length() - 1; start++) {
+            String suffix = base.substring(start);                 // "BK1AXCBR","K1AXCBR",..."XCBR"
+            Entry candidate = DICT.get(suffix);
+            if (candidate != null && candidate.type == EntryType.LOGICAL_NODE) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Infiere la clase LN (ej. "XCBR", "MMXU") desde un nombre con posible prefijo de fabricante.
+     * Ejemplos: "BK1AXCBR1" → "XCBR", "DC7CILO7" → "CILO", "MMXU1" → "MMXU".
+     * Retorna null si no se reconoce ninguna clase LN conocida.
+     */
+    static String inferLnClass(String name) {
+        if (name == null || name.isBlank()) return null;
+        String base = name.trim().toUpperCase().replaceAll("\\d+$", "");
+        Entry e = DICT.get(base);
+        if (e != null && e.type == EntryType.LOGICAL_NODE) return base;
+        for (int start = 1; start < base.length(); start++) {
+            String suffix = base.substring(start);
+            e = DICT.get(suffix);
+            if (e != null && e.type == EntryType.LOGICAL_NODE) return suffix;
         }
         return null;
     }

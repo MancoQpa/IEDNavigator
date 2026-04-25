@@ -28,6 +28,7 @@ class ModelTreeCellRenderer extends DefaultTreeCellRenderer {
     private static final Color COLOR_INTERMEDIATE= new Color(255, 140, 0);
     private static final Color COLOR_BL          = new Color(120, 80,  180);
 
+
     ModelTreeCellRenderer(Map<String, Icon> iconCache, Set<String> watchlist) {
         this.iconCache = iconCache;
         this.watchlist = watchlist;
@@ -109,12 +110,7 @@ class ModelTreeCellRenderer extends DefaultTreeCellRenderer {
         if (prefix.equals("LD")) return iconCache.get("ld");
 
         if (prefix.equals("LN")) {
-            if (name.startsWith("XCBR"))                          return iconCache.get("ln_xcbr");
-            if (name.startsWith("XSWI") || name.startsWith("CSWI")) return iconCache.get("ln_xswi");
-            if (name.startsWith("MMXU") || name.startsWith("MSQI")) return iconCache.get("ln_mmxu");
-            if (name.startsWith("MMTR") || name.startsWith("MSTA")) return iconCache.get("ln_mmtr");
-            if (name.startsWith("CILO"))                          return iconCache.get("ln_cswi");
-            return iconCache.get("ln_default");
+            return lnIcon(name, iconCache);
         }
 
         if (prefix.equals("DO")) {
@@ -144,5 +140,32 @@ class ModelTreeCellRenderer extends DefaultTreeCellRenderer {
         if (prefix.equals("ATTR")) return iconCache.get("da");
 
         return null;
+    }
+
+    /** Selecciona el ícono de LN correcto según la clase inferida (grupo IEC 61850-7-4). */
+    static Icon lnIcon(String name, Map<String, Icon> iconCache) {
+        String cls = Iec61850Dictionary.inferLnClass(name);
+        if (cls == null || cls.isEmpty()) return iconCache.get("ln_default");
+        // Casos específicos de la misma letra
+        if (cls.equals("XCBR"))                               return iconCache.get("ln_xcbr");
+        if (cls.equals("XSWI") || cls.equals("CSWI"))        return iconCache.get("ln_xswi");
+        if (cls.equals("MMTR") || cls.equals("MSTA"))        return iconCache.get("ln_mmtr");
+        if (cls.equals("CILO"))                               return iconCache.get("ln_cswi");
+        // Grupo por letra inicial
+        switch (cls.charAt(0)) {
+            case 'X': return iconCache.get("ln_xswi");   // otros X (XSWI variantes)
+            case 'C': return iconCache.get("ln_cswi");   // otros C (CPOW, CPDM…)
+            case 'M': return iconCache.get("ln_mmxu");   // todos los demás M (medición)
+            case 'P': return iconCache.get("ln_prot");   // protección
+            case 'R': return iconCache.get("ln_rela");   // prot-relacionada (RREC, RPSB…)
+            case 'A': return iconCache.get("ln_auto");   // control automático (ATCC…)
+            case 'L': return iconCache.get("ln_syst");   // sistema (LLN0, LPHD)
+            case 'G': return iconCache.get("ln_genr");   // genérico (GAPC, GGIO)
+            case 'S': return iconCache.get("ln_supv");   // supervisión (STMP, SARC…)
+            case 'T': return iconCache.get("ln_trfm");   // transformador instrumento
+            case 'I': return iconCache.get("ln_intf");   // interfaz (IHMI, ITCI…)
+            case 'Z': return iconCache.get("ln_zpwr");   // otros equipos de potencia
+            default:  return iconCache.get("ln_default");
+        }
     }
 }
