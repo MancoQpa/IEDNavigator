@@ -9,6 +9,8 @@ import javax.swing.tree.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
+import java.net.BindException;
+import java.net.ServerSocket;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.List;
@@ -62,6 +64,8 @@ public class IEDNavigatorApp extends JFrame {
     private JLabel lblFileName;
     private JTextField tfServerPort;
     private JButton btnStartStop;
+    private JButton btnCheckPort;
+    private JButton btnReleasePort;
 
     // Panel Client
     private JTextField tfHost;
@@ -72,7 +76,8 @@ public class IEDNavigatorApp extends JFrame {
 
     // Comunes
     private JLabel lblStatus;
-    private JLabel lblIedInfo;   // placa de identificación del IED (FC=DC)
+    private JLabel lblIedInfo;      // placa de identificación del IED (FC=DC) - barra inferior
+    private JLabel lblIedDisplay;   // nombre del IED destacado - esquina superior derecha
     private JPanel statusIndicator;
     private JTree modelTree;
     private DefaultMutableTreeNode rootNode;
@@ -304,6 +309,20 @@ public class IEDNavigatorApp extends JFrame {
 
         topPanel.add(statusPanel, BorderLayout.CENTER);
 
+        // Panel EAST: nombre del IED/equipo activo destacado
+        lblIedDisplay = new JLabel("  Sin equipo  ");
+        lblIedDisplay.setFont(new Font("Arial", Font.BOLD, 15));
+        lblIedDisplay.setForeground(new Color(15, 55, 120));
+        lblIedDisplay.setHorizontalAlignment(SwingConstants.CENTER);
+        lblIedDisplay.setVerticalAlignment(SwingConstants.CENTER);
+        JPanel iedDisplayPanel = new JPanel(new BorderLayout());
+        iedDisplayPanel.setBackground(new Color(220, 232, 252));
+        iedDisplayPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 2, 1, 1, new Color(80, 120, 200)),
+            BorderFactory.createEmptyBorder(4, 12, 4, 12)));
+        iedDisplayPanel.add(lblIedDisplay, BorderLayout.CENTER);
+        topPanel.add(iedDisplayPanel, BorderLayout.EAST);
+
         contentPanel.add(topPanel, BorderLayout.NORTH);
 
         // === Panel Central: Cards (Server/Client) + Tree ===
@@ -314,7 +333,7 @@ public class IEDNavigatorApp extends JFrame {
         cardPanel = new JPanel(cardLayout);
         cardPanel.add(createServerPanel(), "SERVER");
         cardPanel.add(createClientPanel(), "CLIENT");
-        cardPanel.setPreferredSize(new Dimension(300, 150));
+        cardPanel.setPreferredSize(new Dimension(300, 210));
 
         // Panel izquierdo (cards + log)
         JPanel leftPanel = new JPanel(new BorderLayout(5, 5));
@@ -551,9 +570,104 @@ public class IEDNavigatorApp extends JFrame {
                 "Violeta — Nodo bloqueado (FC=BL, blkEna=true)"));
         main.add(legendColorRow(new Color(0,100,200),
                 "Azul — Nodo en Watchlist (monitoreo activo)"));
+        main.add(Box.createVerticalStrut(8));
+
+        // ── Sección: Functional Constraints ───────────────────────────────
+        main.add(legendTitle("Functional Constraints (FC) — IEC 61850-7-2"));
+        main.add(legendFcRow("ST", new Color(21,101,192),
+                "<b>Status</b> — Estado del proceso: stVal, q, t. Solo lectura desde cliente."));
+        main.add(legendFcRow("MX", new Color(0,105,92),
+                "<b>Measurands</b> — Mediciones analógicas en tiempo real: mag.f, q, t."));
+        main.add(legendFcRow("CO", new Color(183,28,28),
+                "<b>Control</b> — Comandos de maniobra: Oper, SBOw, Cancel."));
+        main.add(legendFcRow("CF", new Color(74,20,140),
+                "<b>Configuration</b> — Parámetros de configuración del IED."));
+        main.add(legendFcRow("DC", new Color(55,71,79),
+                "<b>Description</b> — Placa del equipo: VendorName, Model, SerialNum."));
+        main.add(legendFcRow("SP", new Color(230,81,0),
+                "<b>Setting</b> — Ajustes operativos del IED (setpoints de protección)."));
+        main.add(legendFcRow("SG", new Color(245,127,23),
+                "<b>Setting Group</b> — Selector del grupo activo de ajustes."));
+        main.add(legendFcRow("SE", new Color(130,119,23),
+                "<b>Setting Group Edit</b> — Edición del grupo inactivo de ajustes."));
+        main.add(legendFcRow("BL", new Color(78,52,46),
+                "<b>Blocking</b> — Bloqueo funcional: blkEna inhabilita operación del LN."));
+        main.add(legendFcRow("EX", new Color(84,110,122),
+                "<b>Extended</b> — Atributos propietarios del fabricante."));
+        main.add(legendFcRow("OR", new Color(27,94,32),
+                "<b>Operate Received</b> — Confirmación de recepción de operación."));
+        main.add(legendFcRow("RP", new Color(0,96,100),
+                "<b>Unbuffered Report</b> — Control de reporte sin buffer (URCB)."));
+        main.add(legendFcRow("BR", new Color(1,87,155),
+                "<b>Buffered Report</b> — Control de reporte con buffer, conserva histórico (BRCB)."));
+        main.add(legendFcRow("GO", new Color(136,14,79),
+                "<b>GOOSE</b> — Atributos de control para publicación GOOSE (GoCB)."));
+        main.add(Box.createVerticalStrut(8));
+
+        // ── Sección: Common Data Classes ─────────────────────────────────
+        main.add(legendTitle("Clases de Datos Comunes (CDC) — IEC 61850-7-3"));
+
+        main.add(legendCdcHeader("Estado binario"));
+        main.add(legendCdcRow("SPS",
+                "Single Point Status — stVal <i>BOOL</i>. Uso: señales ON/OFF (alarmas, contactos auxiliares)."));
+        main.add(legendCdcRow("DPS",
+                "Double Point Status — stVal {off | intermediate | on | bad}. Uso: disyuntores y seccionadores."));
+        main.add(legendCdcRow("ACT",
+                "Protection Activation — general <i>BOOL</i> + phsA/B/C. Uso: PTRC, PDIF, señales de disparo."));
+        main.add(legendCdcRow("ACD",
+                "Directional Protection Activation — general + dirGeneral {forward | backward}. Uso: PDIR, PDIS."));
+
+        main.add(legendCdcHeader("Estado entero / enumerado"));
+        main.add(legendCdcRow("INS",
+                "Integer Status — stVal <i>INT32</i>. Uso: posición de tap, contadores, modos de operación."));
+        main.add(legendCdcRow("ENS",
+                "Enumerated Status — stVal <i>enum</i>. Uso: estados nombrados de equipos."));
+        main.add(legendCdcRow("BCR",
+                "Binary Counter Reading — actVal <i>INT64</i>. Uso: MMTR (energía activa kWh, reactiva kVArh)."));
+
+        main.add(legendCdcHeader("Medición analógica"));
+        main.add(legendCdcRow("MV",
+                "Measured Value — mag.f <i>FLOAT32</i> escalar. Uso: frecuencia, temperatura, potencia total."));
+        main.add(legendCdcRow("CMV",
+                "Complex Measured Value — cVal.mag.f + cVal.ang.f. Uso: fasorial monofásico (puntero complejo)."));
+        main.add(legendCdcRow("WYE",
+                "Three Phase Y — phsA/phsB/phsC de tipo CMV. Uso: MMXU tensiones (Va/Vb/Vc) y corrientes."));
+        main.add(legendCdcRow("DEL",
+                "Three Phase \u0394 — phsAB/phsBC/phsCA de tipo CMV. Uso: MMXU tensiones de línea."));
+        main.add(legendCdcRow("SEQ",
+                "Sequence Components — c1/c2/c0 CMV. Uso: MSQI (componentes simétricas: directa, inversa, homopolar)."));
+        main.add(legendCdcRow("HMV",
+                "Harmonic Measured Value — array de armónicos. Uso: MHAI (THD, H1\u2013H50 de tensión y corriente)."));
+
+        main.add(legendCdcHeader("Control (comandables)"));
+        main.add(legendCdcRow("SPC",
+                "Single Point Controllable — stVal BOOL + Oper. Uso: control simple (LED, bloqueo, reset)."));
+        main.add(legendCdcRow("DPC",
+                "Double Point Controllable — stVal DPS + Oper. Uso: disyuntores (XCBR) y seccionadores (XSWI/CSWI)."));
+        main.add(legendCdcRow("APC",
+                "Analogue Point Controllable — setMag FLOAT32 + Oper. Uso: setpoint analógico (tensión de referencia)."));
+        main.add(legendCdcRow("BSC",
+                "Binary Controlled Step — valWTr + Oper RAISE/LOWER. Uso: regulador de tap (ATCC, ITCP)."));
+
+        main.add(legendCdcHeader("Ajustes (FC = SP / SG / SE)"));
+        main.add(legendCdcRow("ING",
+                "Integer Setting — setVal <i>INT32</i>. Uso: retardos en ms, contadores de intentos (RREC)."));
+        main.add(legendCdcRow("SPG",
+                "Single Point Setting — setVal <i>BOOL</i>. Uso: habilitación de funciones (PDIS, RREC)."));
+        main.add(legendCdcRow("ASG",
+                "Analogue Setting — setVal <i>FLOAT32</i>. Uso: umbrales de protección (distancia, diferencial)."));
+        main.add(legendCdcRow("ENG",
+                "Enumerated Setting — setVal <i>enum</i>. Uso: modo de operación, característica de protección."));
+
+        main.add(legendCdcHeader("Placa del equipo (FC = DC)"));
+        main.add(legendCdcRow("DPL",
+                "Device Name Plate — vendor, model, hwRev, swRev, serNum, location. Uso: identificación del IED."));
+        main.add(legendCdcRow("LPL",
+                "LN Name Plate — vendor, swRev, d (descripción). Uso: identificación de cada Nodo Lógico."));
+        main.add(Box.createVerticalStrut(8));
 
         JScrollPane scroll = new JScrollPane(main);
-        scroll.setPreferredSize(new java.awt.Dimension(500, 520));
+        scroll.setPreferredSize(new java.awt.Dimension(560, 580));
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         scroll.setBorder(null);
 
@@ -598,6 +712,45 @@ public class IEDNavigatorApp extends JFrame {
         sample.setPreferredSize(new java.awt.Dimension(52, 18));
         row.add(sample);
         row.add(new JLabel(description));
+        return row;
+    }
+
+    /** Fila de Functional Constraint con badge de color para el diálogo de leyenda. */
+    private static JPanel legendFcRow(String fc, Color badge, String html) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel lbl = new JLabel(fc);
+        lbl.setOpaque(true);
+        lbl.setBackground(badge);
+        lbl.setForeground(Color.WHITE);
+        lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 10f));
+        lbl.setBorder(BorderFactory.createEmptyBorder(1, 5, 1, 5));
+        lbl.setPreferredSize(new java.awt.Dimension(30, 17));
+        lbl.setHorizontalAlignment(SwingConstants.CENTER);
+        row.add(lbl);
+        row.add(new JLabel("<html>" + html + "</html>"));
+        return row;
+    }
+
+    /** Encabezado de subcategoría CDC (texto en cursiva). */
+    private static JLabel legendCdcHeader(String text) {
+        JLabel lbl = new JLabel("<html><i style='color:#555555; font-size:10px;'>" + text + "</i></html>");
+        lbl.setBorder(BorderFactory.createEmptyBorder(5, 14, 1, 0));
+        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return lbl;
+    }
+
+    /** Fila de CDC con nombre en monoespaciado y descripción. */
+    private static JPanel legendCdcRow(String cdc, String html) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 1));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel name = new JLabel(String.format("<html><tt><b>%-4s</b></tt></html>", cdc));
+        name.setPreferredSize(new java.awt.Dimension(46, 16));
+        row.add(Box.createHorizontalStrut(26));
+        row.add(name);
+        row.add(new JLabel("<html>" + html + "</html>"));
         return row;
     }
 
@@ -800,12 +953,25 @@ public class IEDNavigatorApp extends JFrame {
         row3.add(btnStartStop);
         panel.add(row3);
 
-        // Fila 4: Informacion de uso
+        // Fila 4: Verificar Puerto + Liberar Puerto
         JPanel row4 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JLabel lblUsage = new JLabel("<html><small>1. Carga SCL/ICD  2. Inicia servidor  3. Conecta cliente</small></html>");
-        lblUsage.setForeground(new Color(100, 100, 150));
-        row4.add(lblUsage);
+        btnCheckPort = new JButton("Verificar Puerto");
+        btnCheckPort.setToolTipText("<html>Verifica si el puerto indicado esta libre,<br>en uso o requiere permisos de administrador</html>");
+        btnCheckPort.setForeground(new Color(0, 80, 160));
+        row4.add(btnCheckPort);
+
+        btnReleasePort = new JButton("Liberar Puerto");
+        btnReleasePort.setToolTipText("<html>Termina el proceso que esta usando el puerto indicado</html>");
+        btnReleasePort.setForeground(new Color(160, 30, 0));
+        row4.add(btnReleasePort);
         panel.add(row4);
+
+        // Fila 5: Info de uso
+        JPanel row5 = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JLabel lblUsage = new JLabel("<html><small>1. Carga SCL/ICD &nbsp; 2. Inicia servidor &nbsp; 3. Conecta cliente</small></html>");
+        lblUsage.setForeground(new Color(100, 100, 150));
+        row5.add(lblUsage);
+        panel.add(row5);
 
         return panel;
     }
@@ -1097,6 +1263,8 @@ public class IEDNavigatorApp extends JFrame {
         // Servidor
         btnSelectFile.addActionListener(e -> selectSclFile());
         btnStartStop.addActionListener(e -> toggleServer());
+        btnCheckPort.addActionListener(e -> checkPort());
+        btnReleasePort.addActionListener(e -> releasePort());
 
         // Cliente
         btnConnect.addActionListener(e -> toggleConnection());
@@ -1564,6 +1732,378 @@ public class IEDNavigatorApp extends JFrame {
     private void toggleServer()        { connectionManager.toggleServer(); }
     private void toggleConnection()    { connectionManager.toggleConnection(); }
 
+    // ── Diagnostico de puerto ────────────────────────────────────────────────
+
+    private void checkPort() {
+        int port;
+        try {
+            port = Integer.parseInt(tfServerPort.getText().trim());
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Puerto invalido.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        btnCheckPort.setEnabled(false);
+        btnCheckPort.setText("Verificando...");
+        final int p = port;
+        new Thread(() -> {
+            String result = diagnosePort(p);
+            SwingUtilities.invokeLater(() -> {
+                btnCheckPort.setEnabled(true);
+                btnCheckPort.setText("Verificar Puerto");
+                showPortDiagnosisDialog(p, result);
+            });
+        }, "port-check").start();
+    }
+
+    private String diagnosePort(int port) {
+        // Intentar abrir el puerto: si funciona => libre, si BindException => ocupado o sin permisos
+        try (ServerSocket ss = new ServerSocket(port)) {
+            return "RESULTADO: PUERTO LIBRE\n\n"
+                + "El puerto " + port + " esta disponible para escuchar.\n"
+                + "El servidor IED deberia poder iniciarse normalmente.\n\n"
+                + "Si el servidor aun no inicia, posibles causas:\n"
+                + "  - Archivo SCL no cargado o con errores de parsing\n"
+                + "  - Excepcion interna de iec61850bean (ver consola)\n"
+                + "  - El puerto se ocupo entre esta verificacion y el inicio\n";
+        } catch (BindException be) {
+            String msg = be.getMessage() != null ? be.getMessage().toLowerCase() : "";
+            if (msg.contains("permission") || msg.contains("access is denied")
+                    || msg.contains("acceso denegado") || msg.contains("errno=13")) {
+                return "RESULTADO: PERMISO DENEGADO\n\n"
+                    + "El SO rechazo el intento de usar el puerto " + port + ".\n"
+                    + "Los puertos menores a 1024 requieren privilegios elevados.\n\n"
+                    + "SOLUCION en Windows:\n"
+                    + "  Ejecutar IED Navigator como Administrador\n"
+                    + "  (clic derecho en IEDNavigator.bat > Ejecutar como administrador)\n\n"
+                    + "SOLUCION en Linux:\n"
+                    + "  sudo iednavigator\n"
+                    + "  o instalar authbind: sudo apt install authbind\n\n"
+                    + "ALTERNATIVA (sin privilegios):\n"
+                    + "  Usar puerto 10102 en el campo Puerto del panel Servidor\n";
+            }
+            // Puerto ocupado
+            return "RESULTADO: PUERTO EN USO\n\n"
+                + "El puerto " + port + " ya esta siendo utilizado por otro proceso.\n\n"
+                + getPortOwnerInfo(port);
+        } catch (Exception e) {
+            return "RESULTADO: ERROR INESPERADO\n\n"
+                + "No se pudo verificar el puerto " + port + ".\n"
+                + "Excepcion: " + e.getClass().getSimpleName() + ": " + e.getMessage() + "\n";
+        }
+    }
+
+    private String getPortOwnerInfo(int port) {
+        StringBuilder sb = new StringBuilder();
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        try {
+            ProcessBuilder pb = isWindows
+                    ? new ProcessBuilder("netstat", "-ano")
+                    : new ProcessBuilder("ss", "-tlnp");
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+            String output = new String(proc.getInputStream().readAllBytes());
+            proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+
+            if (isWindows) {
+                String portToken = ":" + port + " ";
+                StringBuilder matching = new StringBuilder();
+                for (String line : output.split("\n")) {
+                    if (line.contains(portToken) && line.toUpperCase().contains("LISTENING"))
+                        matching.append(line.trim()).append("\n");
+                }
+                if (matching.length() > 0) {
+                    sb.append("Proceso encontrado (netstat -ano):\n").append(matching);
+                    // Extraer PID (ultima columna) y consultar nombre
+                    for (String line : matching.toString().split("\n")) {
+                        String[] parts = line.trim().split("\\s+");
+                        if (parts.length >= 5) {
+                            String pid = parts[4];
+                            String name = getWindowsProcessName(pid);
+                            if (!name.isEmpty())
+                                sb.append("  PID ").append(pid).append(" = ").append(name).append("\n");
+                        }
+                    }
+                } else {
+                    sb.append("netstat no encontro un proceso LISTENING en :").append(port).append("\n");
+                    sb.append("(el proceso pudo liberarse justo despues de la prueba)\n");
+                }
+            } else {
+                sb.append("Resultado de ss -tlnp:\n");
+                for (String line : output.split("\n")) {
+                    if (line.contains(":" + port + " ") || line.contains(":" + port + "\t"))
+                        sb.append("  ").append(line.trim()).append("\n");
+                }
+                // fuser como complemento
+                try {
+                    Process f = new ProcessBuilder("fuser", port + "/tcp")
+                            .redirectErrorStream(true).start();
+                    String fout = new String(f.getInputStream().readAllBytes()).trim();
+                    f.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
+                    if (!fout.isBlank())
+                        sb.append("fuser ").append(port).append("/tcp: PID ").append(fout).append("\n");
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception e) {
+            sb.append("No se pudo ejecutar netstat/ss: ").append(e.getMessage()).append("\n");
+        }
+
+        sb.append("\nACCION RECOMENDADA:\n");
+        sb.append("  Detener el proceso que usa el puerto ").append(port).append("\n");
+        sb.append("  o cambiar el puerto del servidor a uno libre (ej: 10102)\n");
+        if (isWindows) {
+            sb.append("\nVerificacion manual:\n");
+            sb.append("  netstat -ano | findstr \":").append(port).append("\"\n");
+        } else {
+            sb.append("\nVerificacion manual:\n");
+            sb.append("  ss -tlnp sport = :").append(port).append("\n");
+            sb.append("  sudo fuser ").append(port).append("/tcp\n");
+        }
+        return sb.toString();
+    }
+
+    private String getWindowsProcessName(String pid) {
+        try {
+            Process proc = new ProcessBuilder(
+                    "tasklist", "/FI", "PID eq " + pid, "/FO", "CSV", "/NH")
+                    .redirectErrorStream(true).start();
+            String out = new String(proc.getInputStream().readAllBytes()).trim();
+            proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS);
+            if (!out.isBlank() && !out.startsWith("INFO:")) {
+                String[] parts = out.replace("\"", "").split(",");
+                if (parts.length >= 1) return parts[0];
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private void showPortDiagnosisDialog(int port, String result) {
+        JTextArea ta = new JTextArea(result);
+        ta.setEditable(false);
+        ta.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        ta.setBackground(new Color(248, 248, 248));
+        ta.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+
+        Color borderColor;
+        if (result.startsWith("RESULTADO: PUERTO LIBRE"))    borderColor = new Color(0, 140, 0);
+        else if (result.startsWith("RESULTADO: PERMISO"))    borderColor = new Color(200, 100, 0);
+        else if (result.startsWith("RESULTADO: PUERTO EN"))  borderColor = new Color(190, 0, 0);
+        else                                                  borderColor = new Color(120, 0, 160);
+
+        JScrollPane sp = new JScrollPane(ta);
+        sp.setPreferredSize(new java.awt.Dimension(500, 300));
+        sp.setBorder(BorderFactory.createLineBorder(borderColor, 2));
+
+        JDialog dlg = new JDialog(this, "Diagnostico  —  Puerto " + port, true);
+        dlg.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dlg.add(sp);
+        dlg.pack();
+        dlg.setLocationRelativeTo(this);
+        dlg.setVisible(true);
+    }
+
+    private void releasePort() {
+        int port;
+        try {
+            port = Integer.parseInt(tfServerPort.getText().trim());
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Puerto invalido.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Buscar PIDs que usan el puerto
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        java.util.List<String[]> found = findPortPids(port, isWindows); // cada String[]: {pid, processName}
+
+        if (found.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                    "No se encontro ningun proceso usando el puerto " + port + ".\n" +
+                    "Puede que el puerto ya este libre o no se pudo identificar el proceso.",
+                    "Puerto " + port + " — Sin proceso identificado",
+                    JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Construir mensaje de confirmacion
+        StringBuilder msg = new StringBuilder();
+        msg.append("Se va a TERMINAR el siguiente proceso:\n\n");
+        for (String[] entry : found) {
+            msg.append("  PID ").append(entry[0]);
+            if (!entry[1].isEmpty()) msg.append("  (").append(entry[1]).append(")");
+            msg.append("\n");
+        }
+        msg.append("\nEsto liberara el puerto ").append(port).append(".\n");
+        msg.append("Continuacion requiere confirmacion.\n\n");
+        msg.append("ATENCION: Terminar un proceso del sistema puede causar inestabilidad.");
+
+        int confirm = JOptionPane.showConfirmDialog(this, msg.toString(),
+                "Liberar Puerto " + port, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        // Ejecutar kill en background
+        btnReleasePort.setEnabled(false);
+        btnReleasePort.setText("Liberando...");
+        final int finalPort = port;
+        final boolean finalWin = isWindows;
+        final java.util.List<String[]> finalFound = found;
+
+        new Thread(() -> {
+            StringBuilder result = new StringBuilder();
+            for (String[] entry : finalFound) {
+                String pid = entry[0];
+                String name = entry[1];
+                try {
+                    ProcessBuilder pb = finalWin
+                            ? new ProcessBuilder("taskkill", "/F", "/PID", pid)
+                            : new ProcessBuilder("kill", "-9", pid);
+                    pb.redirectErrorStream(true);
+                    Process proc = pb.start();
+                    String out = new String(proc.getInputStream().readAllBytes()).trim();
+                    int code = proc.waitFor();
+                    if (code == 0) {
+                        result.append("OK  PID ").append(pid);
+                        if (!name.isEmpty()) result.append(" (").append(name).append(")");
+                        result.append(" terminado\n");
+                    } else {
+                        result.append("ERROR  PID ").append(pid).append(": ").append(out).append("\n");
+                        if (finalWin) result.append("  (Intente ejecutar IED Navigator como Administrador)\n");
+                        else result.append("  (Intente con sudo)\n");
+                    }
+                } catch (Exception ex) {
+                    result.append("EXCEPCION al terminar PID ").append(pid).append(": ").append(ex.getMessage()).append("\n");
+                }
+            }
+
+            // Verificar si el puerto quedo libre
+            boolean libre = false;
+            try (ServerSocket ss = new ServerSocket(finalPort)) { libre = true; } catch (Exception ignored) {}
+            result.append("\nEstado del puerto ").append(finalPort).append(": ")
+                  .append(libre ? "LIBRE" : "AUN EN USO").append("\n");
+
+            final String finalResult = result.toString();
+            final boolean finalLibre = libre;
+            SwingUtilities.invokeLater(() -> {
+                btnReleasePort.setEnabled(true);
+                btnReleasePort.setText("Liberar Puerto");
+                JOptionPane.showMessageDialog(this,
+                        finalResult,
+                        "Liberar Puerto " + finalPort + " — " + (finalLibre ? "Exito" : "Revisar"),
+                        finalLibre ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+            });
+        }, "port-release").start();
+    }
+
+    /** Devuelve lista de {pid, processName} que usan el puerto en modo LISTENING (TCP). */
+    private java.util.List<String[]> findPortPids(int port, boolean isWindows) {
+        java.util.List<String[]> result = new java.util.ArrayList<>();
+        try {
+            if (isWindows) {
+                Process proc = new ProcessBuilder("netstat", "-ano")
+                        .redirectErrorStream(true).start();
+                String output = new String(proc.getInputStream().readAllBytes());
+                proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                for (String line : output.split("\n")) {
+                    if (line.contains(":" + port + " ") && line.toUpperCase().contains("LISTENING")) {
+                        String[] parts = line.trim().split("\\s+");
+                        if (parts.length >= 5) {
+                            String pid = parts[4].trim();
+                            String name = getWindowsProcessName(pid);
+                            result.add(new String[]{pid, name});
+                        }
+                    }
+                }
+            } else {
+                // Linux: usar fuser para obtener PIDs directamente
+                try {
+                    Process proc = new ProcessBuilder("fuser", port + "/tcp")
+                            .redirectErrorStream(true).start();
+                    String out = new String(proc.getInputStream().readAllBytes()).trim();
+                    proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    for (String pid : out.split("\\s+")) {
+                        pid = pid.trim();
+                        if (!pid.isEmpty() && pid.matches("\\d+"))
+                            result.add(new String[]{pid, ""});
+                    }
+                } catch (Exception ignored) {}
+
+                // Fallback: ss -tlnp
+                if (result.isEmpty()) {
+                    Process proc = new ProcessBuilder("ss", "-tlnp")
+                            .redirectErrorStream(true).start();
+                    String output = new String(proc.getInputStream().readAllBytes());
+                    proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                    for (String line : output.split("\n")) {
+                        if (line.contains(":" + port + " ") || line.contains(":" + port + "\t")) {
+                            // Extraer pid=XXXX del campo users
+                            java.util.regex.Matcher m =
+                                java.util.regex.Pattern.compile("pid=(\\d+)").matcher(line);
+                            while (m.find()) result.add(new String[]{m.group(1), ""});
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log("Error buscando proceso en puerto " + port + ": " + e.getMessage());
+        }
+        return result;
+    }
+
+    /** Actualiza el label destacado del IED en la esquina superior derecha.
+     *  @param infoText texto completo de la barra inferior, ej:
+     *    "  IED: SEL_735_1  |  Fabricante: SEL  |  Tipo: SEL_735  cfg:ICD-735-R100..."
+     *    "  IED: ?  |  FW: ?  |  Config: ?"
+     *    " " (vacio cuando se desconecta)
+     */
+    private void updateIedDisplay(String infoText) {
+        if (infoText == null || infoText.isBlank()) {
+            lblIedDisplay.setText("  Sin equipo  ");
+            lblIedDisplay.setForeground(new Color(120, 120, 140));
+            return;
+        }
+
+        // Extraer nombre del IED (primer campo tras "IED:")
+        String iedName = "";
+        if (infoText.contains("IED:")) {
+            int s = infoText.indexOf("IED:") + 4;
+            int e = infoText.indexOf("|", s);
+            iedName = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
+        }
+
+        // Extraer subtitulo: Tipo o Config
+        String sub = "";
+        if (infoText.contains("Tipo:")) {
+            int s = infoText.indexOf("Tipo:") + 5;
+            int e = infoText.indexOf("|", s);
+            sub = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
+            // Recortar cfg: si esta pegado
+            if (sub.contains("cfg:")) sub = sub.substring(0, sub.indexOf("cfg:")).trim();
+        } else if (infoText.contains("cfg:")) {
+            int s = infoText.indexOf("cfg:") + 4;
+            int e = infoText.indexOf("|", s);
+            sub = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
+            // Acortar si es muy largo
+            if (sub.length() > 28) sub = sub.substring(0, 28) + "…";
+        } else if (infoText.contains("Config:")) {
+            int s = infoText.indexOf("Config:") + 7;
+            int e = infoText.indexOf("|", s);
+            sub = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
+        }
+
+        if (!iedName.isEmpty() && iedName.equals("?")) iedName = "";
+
+        if (!iedName.isEmpty()) {
+            String html = "<html><div style='text-align:center'>"
+                + "<b style='font-size:13px;'>" + iedName + "</b>";
+            if (!sub.isEmpty() && !sub.equals("?"))
+                html += "<br><span style='font-size:9px;color:#336699;'>" + sub + "</span>";
+            html += "</div></html>";
+            lblIedDisplay.setText(html);
+            lblIedDisplay.setForeground(new Color(15, 55, 120));
+        } else {
+            lblIedDisplay.setText("  Sin equipo  ");
+            lblIedDisplay.setForeground(new Color(120, 120, 140));
+        }
+    }
+
     private void updateConnectionInfo(String host, int port) {
         if (host == null || host.isEmpty() || port == 0) {
             lblConnectionInfo.setText("Sin conexion");
@@ -1655,7 +2195,10 @@ public class IEDNavigatorApp extends JFrame {
             public void setCbPollingEnabled(boolean v) { cbPolling.setEnabled(v); }
             public void setCbPollingSelected(boolean v) { cbPolling.setSelected(v); }
             public void setSpinnerIntervalEnabled(boolean v) { spinnerInterval.setEnabled(v); }
-            public void setLblIedInfo(String text) { lblIedInfo.setText(text); }
+            public void setLblIedInfo(String text) {
+                lblIedInfo.setText(text);
+                IEDNavigatorApp.this.updateIedDisplay(text);
+            }
             public void updateConnectionInfo(String host, int port) {
                 IEDNavigatorApp.this.updateConnectionInfo(host, port);
             }
