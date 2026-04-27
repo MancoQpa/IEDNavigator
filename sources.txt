@@ -1,3 +1,3 @@
 ﻿C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\src\main\java\com\iedexplorer\IEC61850Client.java
 C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\src\main\java\com\iedexplorer\IEC61850Server.java
-C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\src\main\java\com\iedexplorer\IEDExplorerApp.java
+C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\src\main\java\com\iedexplorer\IEDNavigatorApp.java

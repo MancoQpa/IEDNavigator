@@ -93,7 +93,7 @@ if %errorlevel% neq 0 (
     echo Solicitando permisos de administrador...
     echo (Requerido para puerto 102 y captura GOOSE)
     echo.
-    powershell -Command "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs"
+    powershell -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"\"%~f0\"\"' -Verb RunAs -WorkingDirectory '%~dp0'"
     exit /b
 )
 :: ──────────────────────────────────────────────────────────────────────────
