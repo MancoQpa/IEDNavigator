@@ -70,101 +70,73 @@ Write-Host "OK" -ForegroundColor Green
 # Step 3: Create launcher and installer scripts
 Write-Host "[3/4] Creando scripts..." -ForegroundColor Yellow
 
-# ── Main launcher: IEDNavigator.bat ─────────────────────────────────────────
-# NOVEDAD v3.1: bloque de auto-elevacion UAC al inicio
-#   - Permite escuchar en puerto 102 (privilegiado en Windows)
-#   - Necesario para captura GOOSE con Npcap
+# ── Main launcher: IEDNavigator.bat (minimal wrapper) ───────────────────────
+# Calls IEDNavigator.ps1 which handles elevation cleanly in PowerShell
 @"
 @echo off
-setlocal enabledelayedexpansion
-
-:: IED Navigator v$Version - Launcher
-:: Desarrollado por Emilio Medina
-:: NOTA: Se ejecuta como Administrador para permitir puerto 102 y captura GOOSE
-
-title IED Navigator v$Version
-
-cd /d "%~dp0"
-
-:: ── Auto-elevar a Administrador ────────────────────────────────────────────
-:: Necesario para: puerto 102 (MMS estandar IEC 61850) y captura GOOSE/Npcap
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Solicitando permisos de administrador...
-    echo (Requerido para puerto 102 y captura GOOSE)
-    echo.
-    powershell -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"\"%~f0\"\"' -Verb RunAs -WorkingDirectory '%~dp0'"
-    exit /b
-)
-:: ──────────────────────────────────────────────────────────────────────────
-
-:: Check bundled JRE first
-if exist "%~dp0jre\bin\java.exe" (
-    set "JAVA_EXE=%~dp0jre\bin\java.exe"
-    goto :run
-)
-
-:: Check JAVA_HOME
-if defined JAVA_HOME (
-    if exist "%JAVA_HOME%\bin\java.exe" (
-        set "JAVA_EXE=%JAVA_HOME%\bin\java.exe"
-        goto :run
-    )
-)
-
-:: Search common Java locations
-for /d %%d in ("C:\Program Files\Eclipse Adoptium\jdk-*") do (
-    if exist "%%d\bin\java.exe" (
-        set "JAVA_EXE=%%d\bin\java.exe"
-        goto :run
-    )
-)
-for /d %%d in ("C:\Program Files\Java\jdk-*") do (
-    if exist "%%d\bin\java.exe" (
-        set "JAVA_EXE=%%d\bin\java.exe"
-        goto :run
-    )
-)
-for /d %%d in ("C:\Program Files\Microsoft\jdk-*") do (
-    if exist "%%d\bin\java.exe" (
-        set "JAVA_EXE=%%d\bin\java.exe"
-        goto :run
-    )
-)
-
-:: Try PATH
-where java >nul 2>&1
-if %errorlevel% equ 0 (
-    set "JAVA_EXE=java"
-    goto :run
-)
-
-:: Not found
-echo.
-echo ERROR: Java no encontrado.
-echo.
-echo Ejecute INSTALAR.bat para instalar los requisitos,
-echo o instale Java 11+ manualmente desde: https://adoptium.net/
-echo.
-pause
-exit /b 1
-
-:run
-echo Iniciando IED Navigator v$Version...
-
-:: Build classpath
-set "CP=classes"
-for %%j in (lib\*.jar) do set "CP=!CP!;%%j"
-
-:: Run
-"%JAVA_EXE%" --enable-native-access=ALL-UNNAMED -Djna.library.path="%~dp0lib" -cp "%CP%" com.iednavigator.IEDNavigatorApp %*
-
-if %errorlevel% neq 0 (
-    echo.
-    echo La aplicacion termino con errores.
-    pause
-)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0IEDNavigator.ps1"
 "@ | Out-File -FilePath "$AppDir\IEDNavigator.bat" -Encoding ASCII
+
+# ── Real launcher: IEDNavigator.ps1 ─────────────────────────────────────────
+# PowerShell handles paths with spaces natively - no CMD quoting issues
+@"
+`$ScriptDir = Split-Path -Parent `$MyInvocation.MyCommand.Path
+Set-Location `$ScriptDir
+
+# Auto-elevate to Administrator if needed
+# Required for: port 102 (MMS standard IEC 61850) and GOOSE/Npcap capture
+`$id = [Security.Principal.WindowsIdentity]::GetCurrent()
+`$pr = [Security.Principal.WindowsPrincipal]`$id
+if (-not `$pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host 'Solicitando permisos de administrador...'
+    Write-Host '(Requerido para puerto 102 y captura GOOSE)'
+    `$psi = New-Object System.Diagnostics.ProcessStartInfo 'powershell.exe'
+    `$psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File ```"`$(`$MyInvocation.MyCommand.Path)```""
+    `$psi.Verb = 'runas'
+    `$psi.WorkingDirectory = `$ScriptDir
+    try { [System.Diagnostics.Process]::Start(`$psi) | Out-Null }
+    catch { Write-Host "No se pudo elevar: `$_" -ForegroundColor Yellow }
+    exit
+}
+
+# Find Java
+`$java = `$null
+`$candidates = @(
+    "`$env:JAVA_HOME\bin\java.exe",
+    'C:\Program Files\Eclipse Adoptium\jdk-*\bin\java.exe',
+    'C:\Program Files\Java\jdk-*\bin\java.exe',
+    'C:\Program Files\Microsoft\jdk-*\bin\java.exe'
+)
+foreach (`$p in `$candidates) {
+    `$hit = Get-Item `$p -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (`$hit) { `$java = `$hit.FullName; break }
+}
+if (-not `$java) { try { `$java = (Get-Command java -ErrorAction Stop).Source } catch {} }
+
+if (-not `$java) {
+    Write-Host ''
+    Write-Host 'ERROR: Java no encontrado.' -ForegroundColor Red
+    Write-Host 'Ejecute INSTALAR.bat para instalar los requisitos.'
+    Write-Host 'O instale Java 11+ desde: https://adoptium.net/'
+    Read-Host 'Presione Enter para salir'
+    exit 1
+}
+
+# Build classpath
+`$classes = Join-Path `$ScriptDir 'classes'
+`$jars    = (Get-ChildItem (Join-Path `$ScriptDir 'lib') -Filter '*.jar').FullName
+`$cp      = (,`$classes + `$jars) -join ';'
+
+# Launch app (non-blocking - app opens its own window)
+Write-Host "Iniciando IED Navigator v$Version..." -ForegroundColor Cyan
+Write-Host "Java: `$java" -ForegroundColor Gray
+Start-Process `$java -ArgumentList @(
+    '--enable-native-access=ALL-UNNAMED',
+    "-Djna.library.path=`$ScriptDir\lib",
+    '-cp', `$cp,
+    'com.iednavigator.IEDNavigatorApp'
+) -WorkingDirectory `$ScriptDir
+"@ | Out-File -FilePath "$AppDir\IEDNavigator.ps1" -Encoding UTF8
 
 # ── Unattended installer: INSTALAR.bat ───────────────────────────────────────
 @"
@@ -186,18 +158,24 @@ echo   Desarrollado por Emilio Medina
 echo ================================================
 echo.
 
-:: Check admin privileges
+cd /d "%~dp0"
+
+:: Auto-elevate to Administrator (required for Npcap, firewall rules, etc.)
 net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [!] Se requieren privilegios de administrador.
-    echo     Haga clic derecho en INSTALAR.bat y seleccione
-    echo     "Ejecutar como administrador"
-    echo.
+if %errorlevel% equ 0 goto :run_elevated
+if "%1"=="ELEVATED" (
+    echo [!] La elevacion fallo. Ejecute manualmente como Administrador.
     pause
     exit /b 1
 )
+echo Solicitando permisos de administrador...
+set "ELEV_PS1=%TEMP%\ied_install_elev.ps1"
+echo Start-Process 'cmd.exe' -ArgumentList ('/c "%~f0" ELEVATED') -Verb RunAs -WorkingDirectory '%~dp0' > "%ELEV_PS1%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ELEV_PS1%"
+del "%ELEV_PS1%" >nul 2>&1
+exit /b
 
-cd /d "%~dp0"
+:run_elevated
 
 echo [1/5] Verificando Java...
 echo.
