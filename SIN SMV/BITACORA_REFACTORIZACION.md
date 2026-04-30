@@ -305,6 +305,105 @@
 
 ---
 
+## FASE GUI — Nuevas funcionalidades UI (IEDNavigatorApp.java)
+
+### [GUI-001] Leyenda FC y CDC en diálogo de ayuda
+- **Fecha**: 2026-04-30
+- **Archivo**: `src/main/java/com/iednavigator/IEDNavigatorApp.java`
+- **Cambio**: Añadidas dos secciones al diálogo de leyenda de colores:
+  - "Functional Constraints (FC)": 14 entradas con badges de color (ST=azul, MX=teal, CO=rojo, etc.)
+  - "Clases de Datos Comunes (CDC)": subcategorías por tipo (estado, medida, control, config, log)
+  - ScrollPane ampliado de 500×520 → 560×580 px
+  - Métodos helper nuevos: `legendFcRow()`, `legendCdcHeader()`, `legendCdcRow()`
+- **Rollback**: Revertir commit `cde156a` (diccionario) → `f493b3b`
+- **Estado**: ✅ Aplicado
+
+### [GUI-002] Botones "Verificar Puerto" y "Liberar Puerto"
+- **Fecha**: 2026-04-30
+- **Archivo**: `src/main/java/com/iednavigator/IEDNavigatorApp.java`
+- **Cambio**:
+  - `btnCheckPort`: lee el campo "Puerto" del panel Servidor y ejecuta `diagnosePort(int)`
+  - `btnReleasePort`: encuentra PIDs via `findPortPids()`, muestra confirmación, mata con `taskkill /F /PID` (Win) o `kill -9` (Linux)
+  - `diagnosePort()`: intenta `new ServerSocket(port)`, distingue FREE / PERMISSION_DENIED / IN_USE
+  - `getPortOwnerInfo()`: corre `netstat -ano` (Win) o `ss -tlnp` (Linux) para identificar proceso
+  - `showPortDiagnosisDialog()`: diálogo modal con borde coloreado según resultado
+  - Layout del panel Servidor: cardPanel ampliado a 210 px alto; botones en fila separada
+- **Rollback**: Revertir commit `f493b3b`
+- **Estado**: ✅ Aplicado
+
+### [GUI-003] Display del nombre del IED en la barra superior
+- **Fecha**: 2026-04-30
+- **Archivo**: `src/main/java/com/iednavigator/IEDNavigatorApp.java`
+- **Cambio**:
+  - `lblIedDisplay` añadido a `topPanel` en posición `BorderLayout.EAST`
+  - Panel con fondo `new Color(220,232,252)`, fuente bold 15px, borde azul
+  - `updateIedDisplay(String)`: parsea nombre del IED del texto de `setLblIedInfo`
+  - `setLblIedInfo` en Context ahora también llama `updateIedDisplay()`
+- **Rollback**: Revertir commit `f493b3b`
+- **Estado**: ✅ Aplicado
+
+---
+
+## FASE DIST — Distribución e instaladores
+
+### [DIST-001] Installer Windows v3.1 — ZIP desatendido con UAC
+- **Fecha**: 2026-04-30
+- **Archivo nuevo**: `build_zip_installer_v31.ps1`
+- **Salida**: `installer/output/IEDNavigator_v3.1_Setup.zip` (10 MB)
+- **Contenido del ZIP**: `classes/`, `lib/*.jar`, `lib/iec61850.dll`, `IEDNavigator.bat`, `INSTALAR.bat`, `LEAME.txt`, `src/`, `compile.ps1`
+- **INSTALAR.bat**: auto-detección/instalación de Java JDK21 (Adoptium API), Npcap, regla firewall TCP 102, acceso directo en Escritorio
+- **IEDNavigator.bat**: auto-elevación UAC para puerto 102 y captura GOOSE
+- **Estado**: ✅ Aplicado
+
+### [DIST-002] Installer Linux Ubuntu Desktop v3.1 — ZIP desatendido con authbind
+- **Fecha**: 2026-04-30
+- **Archivo nuevo**: `build_linux_installer_v31.ps1`
+- **Salida**: `installer/output/IEDNavigator_v3.1_Linux.zip` (8.12 MB)
+- **instalar.sh**: instala Java, libpcap, authbind; configura `/etc/authbind/byport/102`; copia a `/opt/iednavigator/`; crea `.desktop` entry
+- **iednavigator.sh**: detecta authbind y ejecuta `authbind --deep java ... IEDNavigatorApp`
+- **Estado**: ✅ Aplicado
+
+### [DIST-003] Fix UAC elevation — ventana se cerraba sola (v3.2)
+- **Fecha**: 2026-04-30
+- **Archivo**: `build_zip_installer_v31.ps1`
+- **Bug**: `\"` dentro de string PS single-quoted es `\` + `"` literal, NO quote escapado. `Start-Process` pasaba args inválidos a `cmd.exe` → ventana elevada nunca aparecía → original cerraba con `exit /b`
+- **Fix**: Reemplazado `IEDNavigator.bat` (90 líneas de batch+UAC) por:
+  - `IEDNavigator.bat`: 2 líneas — wrapper que llama `IEDNavigator.ps1`
+  - `IEDNavigator.ps1`: launcher PS1 con `ProcessStartInfo.Verb='runas'` (sin quoting issues), detección de Java via `Get-Item` wildcards, construcción de classpath, `Start-Process` del app
+- **Fix INSTALAR.bat**: auto-eleva escribiendo PS1 temporal con `echo ... > %TEMP%\*.ps1` + `powershell -File`; ya no requiere clic derecho manual
+- **Commit**: `5db30f2`
+- **Estado**: ✅ Aplicado
+
+### [DIST-004] Npcap — descargar en lugar de bundlear (cumplimiento de licencia)
+- **Fecha**: 2026-04-30
+- **Archivo**: `build_zip_installer_v31.ps1`
+- **Bug de licencia**: Npcap prohíbe redistribución sin licencia OEM de pago. El ZIP incluía `npcap-1.79.exe` violando sus términos
+- **Fix**: Eliminada copia de `npcap-1.79.exe` al ZIP; `INSTALAR.bat` ahora descarga `https://npcap.com/dist/npcap-1.79.exe` en tiempo de instalación (igual que Java)
+- **Impacto**: ZIP bajó de 10 MB → 8.9 MB
+- **Commit**: `8b42008`
+- **Estado**: ✅ Aplicado
+
+### [DIST-005] GitHub Release v3.2
+- **Fecha**: 2026-04-30
+- **Acción**: `gh release create v3.2` con `IEDNavigator_v3.2_Setup.zip` como asset
+- **URL**: https://github.com/MancoQpa/IEDNavigator/releases/tag/v3.2
+- **Estado**: ✅ Publicado
+
+---
+
+## Registro de compilaciones (continuación)
+
+| Fecha | Cambio | Resultado | Notas |
+|-------|--------|-----------|-------|
+| 2026-04-30 | GUI-001/002/003 | ✅ OK | Leyenda FC/CDC, botones puerto, display IED; commit `f493b3b` |
+| 2026-04-30 | DIST-001 | ✅ OK | v3.1 Windows ZIP generado (10 MB) |
+| 2026-04-30 | DIST-002 | ✅ OK | v3.1 Linux ZIP generado (8.12 MB) |
+| 2026-04-30 | DIST-003 | ✅ OK | v3.2 con launcher PS1; commit `5db30f2` |
+| 2026-04-30 | DIST-004 | ✅ OK | Npcap descargado; ZIP 8.9 MB; commit `8b42008` |
+| 2026-04-30 | DIST-005 | ✅ OK | Release v3.2 publicado en GitHub |
+
+---
+
 ## Cómo hacer rollback de un paso
 
 ```bash
