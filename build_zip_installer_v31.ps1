@@ -52,14 +52,9 @@ if ($dlls) {
     Write-Host "  DLLs copiadas ($($dlls.Count))" -ForegroundColor Gray
 }
 
-# Copy Npcap installer if available
-$npcapSrc = "$ProjectRoot\installer\prereq\npcap-1.79.exe"
-if (Test-Path $npcapSrc) {
-    Copy-Item -Path $npcapSrc -Destination "$AppDir\npcap-1.79.exe"
-    Write-Host "  Npcap installer incluido" -ForegroundColor Gray
-} else {
-    Write-Host "  AVISO: Npcap no encontrado en prereq\, el usuario debera instalarlo manualmente" -ForegroundColor Yellow
-}
+# Note: Npcap is NOT bundled (license prohibits redistribution without OEM license)
+# The installer will download it directly from npcap.com if needed
+Write-Host "  Npcap: se descargara desde npcap.com si es necesario" -ForegroundColor Gray
 
 # Copy source code for reference
 Copy-Item -Path "$ProjectRoot\src\*"      -Destination "$AppDir\src" -Recurse
@@ -255,13 +250,17 @@ reg query "HKLM\SOFTWARE\WOW6432Node\Npcap" >nul 2>&1 && set "NPCAP_FOUND=1"
 if "!NPCAP_FOUND!"=="1" (
     echo   [OK] Npcap/WinPcap ya instalado
 ) else (
-    if exist "%~dp0npcap-1.79.exe" (
+    echo   Descargando Npcap desde npcap.com...
+    set "NPCAP_EXE=%TEMP%\npcap-setup.exe"
+    powershell -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; Invoke-WebRequest -Uri 'https://npcap.com/dist/npcap-1.79.exe' -OutFile '!NPCAP_EXE!' -UseBasicParsing" 2>nul
+    if exist "!NPCAP_EXE!" (
         echo   Instalando Npcap silenciosamente...
-        "%~dp0npcap-1.79.exe" /S /winpcap_mode=yes
+        "!NPCAP_EXE!" /S /winpcap_mode=yes
+        del "!NPCAP_EXE!" 2>nul
         echo   [OK] Npcap instalado
     ) else (
-        echo   [!!] Npcap no incluido en el paquete.
-        echo   Por favor instale desde: https://npcap.com/
+        echo   [!!] No se pudo descargar Npcap.
+        echo   Por favor instale manualmente desde: https://npcap.com/
         echo   (Necesario para captura GOOSE/SV)
         echo.
     )
