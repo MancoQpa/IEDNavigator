@@ -82,6 +82,10 @@ IEDNavigator_new.jar
 # HarmonicMonitor (repo separado)
 HarmonicMonitor/
 
+# Documentación local — no subir a GitHub
+SIN SMV/IEDNAVIGATOR_GUIA_DESARROLLADOR.md
+SIN SMV/IEDNAVIGATOR_GUIA_USUARIO_COMPARATIVA.md
+
 # Claude AI internal
 .claude/
 
