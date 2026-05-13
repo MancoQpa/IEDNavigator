@@ -1,4 +1,4 @@
-# IEDNavigator v3.0-edu
+# IEDNavigator v1.0-edu
 
 Herramienta de escritorio Java para exploracion y simulacion del protocolo **IEC 61850**.
 Funcionalmente similar a cualquier herramienta de exploración de ieds. De uso libre bajo licencia GPL v3.
