@@ -404,6 +404,168 @@
 
 ---
 
+## FASE RENAME — Migración a com.iednavigator
+
+### [RENAME-001] Renombrar paquete com.iedexplorer → com.iednavigator
+- **Fecha**: 2026-04-30
+- **Commit**: `8efc45e`
+- **Cambio**: Todos los archivos de `com.iedexplorer` copiados/renombrados a `com.iednavigator`
+  - Clase principal: `IEDExplorerApp.java` → `IEDNavigatorApp.java`
+  - Todos los imports actualizados al nuevo paquete
+  - `com.iedexplorer/` marcado como gitignoreado (paquete obsoleto)
+- **Estado inicial post-rename**: `IEDNavigatorApp.java` 2043 líneas
+- **Estado**: ✅ Aplicado
+
+---
+
+## FASE POST-RENAME — Nuevas funcionalidades (com.iednavigator)
+
+### [PN-001] Diccionario educativo IEC 61850
+- **Fecha**: 2026-04-30
+- **Commit**: `cde156a`
+- **Archivo nuevo**: `Iec61850Dictionary.java` (1102 líneas)
+- **Cambio**: Clic derecho en nodo del árbol muestra descripción normativa del LN/DO/DA
+- **Estado**: ✅ Aplicado
+
+### [PN-002] Íconos diferenciados por grupo de LN e inferencia de clase
+- **Fecha**: 2026-04-30
+- **Commit**: `198e3e1`
+- **Archivo**: `IEDNavigatorApp.java`, `IconFactory.java`
+- **Cambio**: Íconos visuales por categoría LN (protección, medida, control, etc.); inferencia de clase con prefijo de fabricante
+- **Estado**: ✅ Aplicado
+
+### [PN-003] Dataset panel — clic en miembro navega al nodo
+- **Fecha**: 2026-04-30
+- **Commit**: `d99e66f`
+- **Archivo**: `DatasetPanel.java`
+- **Cambio**: Al hacer clic en un FCDA del Dataset panel, se navega al nodo correspondiente en el árbol de datos
+- **Estado**: ✅ Aplicado
+
+### [PN-004] Verificar/liberar puerto, display IED, leyenda FC/CDC
+- **Fecha**: 2026-04-30
+- **Commit**: `f493b3b`
+- **Archivo**: `IEDNavigatorApp.java`
+- **Cambios**:
+  - `btnCheckPort` / `btnReleasePort`: diagnóstico y liberación de puerto TCP 102
+  - `lblIedDisplay`: nombre del IED en barra superior
+  - Leyenda FC y CDC en diálogo de ayuda
+- **Estado**: ✅ Aplicado
+
+---
+
+## Estado actual — com.iednavigator (2026-05-18)
+
+### Inventario de archivos
+
+| Archivo | Líneas | Rol |
+|---------|--------|-----|
+| `IEDNavigatorApp.java` | 2043 | GUI principal — orquestador central |
+| `GoosePanel.java` | 1918 | Panel GOOSE completo (pub/sub/bridge/sync) |
+| `Iec61850Dictionary.java` | 1102 | Diccionario normativo IEC 61850 |
+| `IEC61850Client.java` | 990 | Cliente MMS, polling, reportes |
+| `IEC61850Server.java` | 642 | Servidor IED desde SCL |
+| `ConnectionManager.java` | 615 | Conexión MMS, modos cliente/servidor |
+| `ModelTreeBuilder.java` | 510 | Construcción y actualización del árbol del modelo |
+| `GoosePublisher.java` | 412 | Publicación GOOSE Layer 2 (pcap4j) |
+| `GooseSubscriber.java` | 407 | Suscripción GOOSE (pcap4j) |
+| `NativeGooseSubscriber.java` | 403 | GOOSE nativo vía JNA/libiec61850 |
+| `SclFileProcessor.java` | 397 | Parsing SCL/ICD/CID/SCD |
+| `NativeSVSubscriber.java` | 378 | SV nativo vía JNA (código presente, UI desactivada) |
+| `GooseUdpBridge.java` | 373 | Bridge GOOSE sobre UDP |
+| `LibIec61850.java` | 369 | JNA bindings a iec61850.dll |
+| `ReportsPanel.java` | 347 | Panel URCB/BRCB — habilitar/deshabilitar reportes |
+| `IconFactory.java` | 316 | Fábrica de íconos Swing (breakers, LNs, estados) |
+| `MonitorManager.java` | 267 | Monitor de valores, watchlist, CSV export |
+| `PollingManager.java` | 233 | Polling periódico de atributos MMS |
+| `SettingGroupsPanel.java` | 224 | Panel de grupos de configuración (SG) |
+| `DatasetPanel.java` | 187 | Panel de DataSets con navegación al nodo |
+| `SmokeTest.java` | 174 | Tests headless (15 casos, sin GUI) |
+| `DataModelPanel.java` | 157 | Panel del árbol de modelo de datos |
+| `ModelTreeCellRenderer.java` | 147 | Renderer del árbol principal (colores/iconos) |
+| `SclParserTest.java` | 93 | Utilidad de prueba de parsing SCL |
+| `SclReferenceUtils.java` | 87 | Helpers de conversión de referencias IEC 61850 |
+| `MonitorTableRenderer.java` | 63 | Renderer de tabla del monitor |
+| `ValueDialogs.java` | 58 | Diálogos de edición de valor (Boolean, Enum, genérico) |
+| `DataModelTreeCellRenderer.java` | 44 | Renderer del árbol de Data Model |
+| `NodeInfo.java` | 33 | DTO: nodo + tipo + texto para árbol |
+| `MonitorItem.java` | 30 | DTO: ítem del monitor (ref, valor, timestamp) |
+| `DataModelNodeInfo.java` | 27 | DTO: nodo Data Model (node + type) |
+| `SclGoCB.java` | 22 | DTO: GoCB parseado desde SCL |
+| `SclDataSet.java` | 17 | DTO: DataSet parseado desde SCL |
+| `SclReport.java` | 17 | DTO: RCB parseado desde SCL |
+| `ListFc.java` | 10 | Utilidad: listar FCs de un modelo |
+| **native_lib/*** | 1150 | JNA bindings (3 archivos) |
+| **TOTAL** | ~12.600 | 35 archivos + 3 native_lib |
+
+### Secciones activas en IEDNavigatorApp.java (2043 líneas)
+
+| Línea | Sección | Estado | Líneas aprox. |
+|-------|---------|--------|---------------|
+| 30 | ENUMS & INNER DATA CLASSES | En IEDNavigatorApp | ~83 |
+| 113 | ICONOS PERSONALIZADOS | En IEDNavigatorApp (ref. IconFactory) | ~6 |
+| 119 | DRAG AND DROP SIMPLIFICADO | En IEDNavigatorApp | ~30 |
+| 264 | Construcción GUI (toolbar, panels, layout) | En IEDNavigatorApp | ~595 |
+| 860 | PANEL CREATION METHODS | En IEDNavigatorApp | ~190 |
+| 1050 | MONITOR PANEL | En IEDNavigatorApp | ~120 |
+| 1173 | SCL PARSING | **Delegado → SclFileProcessor** | wrappers |
+| 1227 | MONITOR OPERATIONS | **Delegado → MonitorManager** | wrappers |
+| 1325 | TREE POPUP & VALUE EDITING | En IEDNavigatorApp | ~285 |
+| 1611 | GOOSE-MODEL SYNC | En IEDNavigatorApp | ~112 |
+| 1723 | CONNECTION MANAGEMENT | **Delegado → ConnectionManager** | wrappers |
+| 2213 | POLLING | **Delegado → PollingManager** | wrappers |
+| 2247 | MODEL TREE BUILDING | **Delegado → ModelTreeBuilder** | wrappers |
+| 2301 | SETTING GROUPS / DATASET / DATA MODEL | **Delegado → paneles externos** | wrappers |
+| 2304 | ENTRY POINT | En IEDNavigatorApp | ~10 |
+
+---
+
+## FASES PENDIENTES — com.iednavigator
+
+### [FP-001] Extraer TREE POPUP & VALUE EDITING → NodeActionHandler.java
+- **Prioridad**: Alta
+- **Sección**: L1325–L1610 en IEDNavigatorApp.java (~285 líneas)
+- **Contenido a mover**:
+  - `buildTreePopupMenu()` / `buildServerTreePopupMenu()`
+  - `setSelectedNodeValue()` / `setSelectedNodeCustomValue()`
+  - `applyServerValue()` / `readSelectedNode()`
+  - `showNodeDetailsDialog()`
+- **Reducción estimada**: IEDNavigatorApp 2043 → ~1758 líneas
+- **Estado**: ⏳ Pendiente
+
+### [FP-002] Extraer MONITOR PANEL → MonitorPanel.java
+- **Prioridad**: Media
+- **Sección**: L1050–L1169 en IEDNavigatorApp.java (~120 líneas)
+- **Contenido a mover**: `createMonitorPanel()` y métodos de refresh de tabla
+- **Reducción estimada**: IEDNavigatorApp → ~1638 líneas
+- **Estado**: ⏳ Pendiente
+
+### [FP-003] Extraer GOOSE-MODEL SYNC → GoosePanel.java (ampliar)
+- **Prioridad**: Media
+- **Sección**: L1611–L1722 en IEDNavigatorApp.java (~112 líneas)
+- **Contenido a mover**: `propagateValueToPublishers()`, `updateGoosePublisherValues()`
+  (ya existen en GoosePanel; revisar si son duplicados o wrappers)
+- **Reducción estimada**: IEDNavigatorApp → ~1526 líneas
+- **Estado**: ⏳ Pendiente
+
+### [FP-004] Extraer construcción GUI principal → métodos builder
+- **Prioridad**: Baja (riesgo alto — código GUI entrelazado)
+- **Sección**: L264–L859 (~595 líneas de layout/toolbar/panels)
+- **Nota**: Refactorizar sin cambiar comportamiento es riesgoso; mejor dejar para último
+- **Estado**: ⏳ Pendiente
+
+---
+
+## Registro de compilaciones — com.iednavigator
+
+| Fecha | Cambio | Resultado | Notas |
+|-------|--------|-----------|-------|
+| 2026-04-30 | RENAME-001 | ✅ OK | Paquete renombrado; IEDNavigatorApp.java partiendo desde estado F28 |
+| 2026-04-30 | PN-001/002/003/004 | ✅ OK | Diccionario, íconos, dataset nav, puerto, display IED |
+| 2026-05-18 | Fix Java 11 compat | ✅ OK | `--release 11` en compile.ps1; `static Color` → `final Color` en IconFactory |
+| 2026-05-18 | build_zip_installer_v32.ps1 | ✅ OK | Release v3.2 funcional; launcher PS1 corregido |
+
+---
+
 ## Cómo hacer rollback de un paso
 
 ```bash
