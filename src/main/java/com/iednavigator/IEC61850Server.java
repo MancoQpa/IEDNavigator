@@ -234,7 +234,17 @@ public class IEC61850Server implements ServerEventListener {
             }
 
             if (listener != null) listener.onLog("[SCL] Arrays con count encontrados: " + totalExpanded);
-            if (totalExpanded == 0) return sclPath;
+
+            // Parche de EnumTypes incompletos (Siemens SIPROTEC5 omite ordinals estándar)
+            int patchedEnums = patchMissingEnumOrdinals(doc);
+            if (patchedEnums > 0) {
+                if (listener != null)
+                    listener.onLog("[SCL] " + patchedEnums
+                        + " EnumVal sintéticos agregados (archivo Siemens con EnumTypes incompletos)");
+                System.out.println("[SERVER] Enum patch: " + patchedEnums + " EnumVal entries added");
+            }
+
+            if (totalExpanded == 0 && patchedEnums == 0) return sclPath;
 
             // Escribir a archivo temporal preservando namespace
             File tempFile = File.createTempFile("ied_expanded_", ".cid");
@@ -255,6 +265,73 @@ public class IEC61850Server implements ServerEventListener {
             System.err.println("[SERVER] SCL array expansion failed: " + e.getMessage());
             return sclPath;
         }
+    }
+
+    /**
+     * Corrige EnumTypes incompletos típicos de CIDs Siemens SIPROTEC5.
+     *
+     * iec61850bean lanza SclParseException("unknown enum value: N") cuando un DAI/Val
+     * contiene un ordinal entero no definido en el EnumType referenciado.
+     * Siemens exporta Behavior con solo ord={1,3,5} omitiendo "blocked"(2) y "test/blocked"(4),
+     * y ctlModel con solo ord={0} o {0,1}, entre otros casos.
+     *
+     * Algoritmo:
+     *   1. Recolecta todos los enteros que aparecen en elementos <Val> del documento.
+     *   2. Para cada <EnumType>, agrega <EnumVal ord="N">_N</EnumVal> para cada N
+     *      que no esté definido (nunca modifica entradas existentes).
+     *
+     * Es conservador y sobre-inclusivo (agrega entradas que quizás no se usan),
+     * pero eso no causa errores — solo un modelo con más opciones que las reales.
+     *
+     * @return número total de EnumVal sintéticos agregados
+     */
+    private int patchMissingEnumOrdinals(Document doc) {
+        // Paso 1: recolectar todos los enteros en elementos <Val>
+        Set<Integer> numericVals = new LinkedHashSet<>();
+        NodeList valNodes = doc.getElementsByTagNameNS("*", "Val");
+        if (valNodes.getLength() == 0) valNodes = doc.getElementsByTagName("Val");
+        for (int i = 0; i < valNodes.getLength(); i++) {
+            String text = valNodes.item(i).getTextContent().trim();
+            try { numericVals.add(Integer.parseInt(text)); } catch (NumberFormatException ignore) {}
+        }
+        if (numericVals.isEmpty()) return 0;
+
+        // Paso 2: para cada EnumType, agregar ordinals faltantes con valor sintético
+        NodeList enumTypes = doc.getElementsByTagNameNS("*", "EnumType");
+        if (enumTypes.getLength() == 0) enumTypes = doc.getElementsByTagName("EnumType");
+
+        int patchCount = 0;
+        for (int i = 0; i < enumTypes.getLength(); i++) {
+            Element enumType = (Element) enumTypes.item(i);
+            String nsUri = enumType.getNamespaceURI();
+
+            // Ordinals ya definidos en este EnumType
+            Set<Integer> defined = new HashSet<>();
+            org.w3c.dom.NodeList children = enumType.getChildNodes();
+            for (int j = 0; j < children.getLength(); j++) {
+                org.w3c.dom.Node child = children.item(j);
+                if (child.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE) {
+                    String ordStr = ((Element) child).getAttribute("ord");
+                    if (!ordStr.isEmpty()) {
+                        try { defined.add(Integer.parseInt(ordStr)); } catch (NumberFormatException ignore) {}
+                    }
+                }
+            }
+
+            // Agregar los ordinals faltantes
+            for (int n : numericVals) {
+                if (!defined.contains(n)) {
+                    Element synth = (nsUri != null && !nsUri.isEmpty())
+                        ? doc.createElementNS(nsUri, "EnumVal")
+                        : doc.createElement("EnumVal");
+                    synth.setAttribute("ord", String.valueOf(n));
+                    synth.setTextContent(String.valueOf(n));
+                    enumType.appendChild(synth);
+                    patchCount++;
+                }
+            }
+        }
+        return patchCount;
     }
 
     /**

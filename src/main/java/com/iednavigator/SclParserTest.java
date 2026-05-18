@@ -17,6 +17,31 @@ public class SclParserTest {
         }
 
         String sclPath = args[0];
+        // --server flag: test via IEC61850Server.getAvailableIEDs() (uses preprocessing pipeline)
+        if ("--server".equals(sclPath) && args.length > 1) {
+            sclPath = args[1];
+            System.out.println("=== IEC61850Server.getAvailableIEDs() Test ===");
+            System.out.println("File: " + sclPath);
+            IEC61850Server server = new IEC61850Server();
+            server.setServerListener(new IEC61850Server.ServerListener() {
+                public void onServerStarted(int p) {}
+                public void onServerStopped() {}
+                public void onClientWrite(String r, String v) {}
+                public void onLog(String msg) { System.out.println("[LOG] " + msg); }
+                public void onError(String msg) { System.err.println("[ERR] " + msg); }
+            });
+            long t0 = System.currentTimeMillis();
+            List<String> ieds = server.getAvailableIEDs(sclPath);
+            System.out.println("Elapsed: " + (System.currentTimeMillis() - t0) + " ms");
+            if (ieds.isEmpty()) {
+                System.err.println("ERROR: No IEDs found (or parse failed — check [SERVER] lines above)");
+            } else {
+                System.out.println("IEDs found: " + ieds);
+                System.out.println("SUCCESS");
+            }
+            return;
+        }
+
         System.out.println("=== SCL Parser Test ===");
         System.out.println("File: " + sclPath);
 
