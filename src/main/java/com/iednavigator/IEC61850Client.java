@@ -33,6 +33,9 @@ public class IEC61850Client implements ClientEventListener {
     // Listener para cambios
     private ValueChangeListener valueChangeListener;
 
+    // Contador de ctlNum — se incrementa en cada operación de control (IEC 61850-7-3 §20.2)
+    private int ctlNumCounter = 0;
+
     public interface ValueChangeListener {
         void onValueChanged(String reference, String value, String type);
         void onError(String reference, String error);
@@ -1126,6 +1129,221 @@ public class IEC61850Client implements ClientEventListener {
             association.setDataValues(blkEnaNode);
         } catch (ServiceError e) {
             throw new IOException("ServiceError setBlocking: " + e.getErrorCode(), e);
+        }
+    }
+
+    // ==================== CONTROL (SBO + DIRECT) ====================
+
+    /**
+     * Resultado de una operación de control.
+     * Contiene el modelo de control usado (ctlModel), resultado y error detallado.
+     */
+    public static class ControlResult {
+        public final boolean success;
+        public final int ctlModel;           // 0-4
+        public final String ctlModelName;    // "direct-normal-security", "sbo-normal-security", etc.
+        public final String error;           // null si success=true
+        public final String lastApplError;   // del nodo LastApplError del IED; puede ser null
+
+        private ControlResult(boolean success, int ctlModel, String ctlModelName,
+                               String error, String lastApplError) {
+            this.success = success;
+            this.ctlModel = ctlModel;
+            this.ctlModelName = ctlModelName;
+            this.error = error;
+            this.lastApplError = lastApplError;
+        }
+
+        static ControlResult ok(int ctlModel, String ctlModelName) {
+            return new ControlResult(true, ctlModel, ctlModelName, null, null);
+        }
+
+        static ControlResult fail(int ctlModel, String ctlModelName,
+                                   String error, String lastApplError) {
+            return new ControlResult(false, ctlModel, ctlModelName, error, lastApplError);
+        }
+    }
+
+    /**
+     * Lee el valor de ctlModel del DO propietario del nodo Oper.
+     * Busca "DO.ctlModel" con FC=CF primero, luego FC=SP.
+     * Retorna 1 (direct-normal-security) si no se encuentra.
+     */
+    public int getCtlModelValue(FcModelNode operNode) {
+        if (serverModel == null) return 1;
+        String operRef = operNode.getReference().toString();
+        int lastDot = operRef.lastIndexOf('.');
+        if (lastDot < 0) return 1;
+        String doRef = operRef.substring(0, lastDot);
+        for (Fc fc : new Fc[]{Fc.CF, Fc.SP}) {
+            try {
+                ModelNode node = serverModel.findModelNode(doRef + ".ctlModel", fc);
+                if (node instanceof BdaInt8U) {
+                    try { association.getDataValues((FcModelNode) node); } catch (Exception ignore) {}
+                    return ((BdaInt8U) node).getValue() & 0xFF;
+                }
+                if (node instanceof BdaInt8) {
+                    try { association.getDataValues((FcModelNode) node); } catch (Exception ignore) {}
+                    return ((BdaInt8) node).getValue() & 0xFF;
+                }
+            } catch (Exception ignore) {}
+        }
+        return 1;
+    }
+
+    /**
+     * Detecta el tipo de ctlVal del nodo Oper (para mostrar el control adecuado en la UI).
+     * Retorna el nombre del tipo: "Boolean", "DoubleBitPos", "Float32", "TapCommand", etc.
+     */
+    public String getOperCtlValType(FcModelNode operNode) {
+        if (operNode.getChildren() == null) return "Boolean";
+        for (ModelNode child : operNode.getChildren()) {
+            if ("ctlVal".equals(child.getName())) {
+                return getValueType(child);
+            }
+        }
+        return "Boolean";
+    }
+
+    /**
+     * Establece el ctlVal del nodo Oper a partir de un string.
+     * Delega a setBasicDataAttributeValue() que ya maneja todos los tipos BDA.
+     */
+    public void setOperCtlVal(FcModelNode operNode, String value) {
+        if (operNode.getChildren() == null) return;
+        for (ModelNode child : operNode.getChildren()) {
+            if ("ctlVal".equals(child.getName()) && child instanceof BasicDataAttribute) {
+                setBasicDataAttributeValue((BasicDataAttribute) child, value);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Rellena los campos de la estructura Oper excepto ctlVal (que se setea por separado):
+     *   - origin.orCat = 3 (remote-control)
+     *   - origin.orIdent = orIdent (UTF-8 bytes)
+     *   - ctlNum = ++ctlNumCounter
+     *   - T = hora actual
+     *   - Test = testFlag
+     * Los campos no presentes en el modelo se ignoran silenciosamente.
+     */
+    private void fillControlStructure(FcModelNode operNode, boolean testFlag, String orIdent) {
+        if (operNode.getChildren() == null) return;
+        for (ModelNode child : operNode.getChildren()) {
+            String name = child.getName();
+            if ("origin".equals(name)) {
+                if (child.getChildren() == null) continue;
+                for (ModelNode oc : child.getChildren()) {
+                    if ("orCat".equals(oc.getName()) && oc instanceof BdaInt8U) {
+                        ((BdaInt8U) oc).setValue((short) 3); // remote-control
+                    } else if ("orIdent".equals(oc.getName()) && oc instanceof BdaOctetString) {
+                        byte[] b = (orIdent != null && !orIdent.isEmpty())
+                            ? orIdent.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                            : new byte[0];
+                        ((BdaOctetString) oc).setValue(b);
+                    }
+                }
+            } else if ("ctlNum".equals(name) && child instanceof BdaInt8U) {
+                ctlNumCounter = (ctlNumCounter + 1) & 0xFF;
+                ((BdaInt8U) child).setValue((short) ctlNumCounter);
+            } else if ("T".equals(name) && child instanceof BdaTimestamp) {
+                ((BdaTimestamp) child).setCurrentTime();
+            } else if ("Test".equals(name) && child instanceof BdaBoolean) {
+                ((BdaBoolean) child).setValue(testFlag);
+            }
+            // Check: se dejan los valores por defecto del modelo
+        }
+    }
+
+    /**
+     * Lee el nodo LastApplError del DO (si existe) y retorna una descripción textual.
+     * Se llama tras un control fallido para obtener la causa específica del IED.
+     */
+    private String readLastApplError(FcModelNode operNode) {
+        if (serverModel == null || association == null) return null;
+        try {
+            String operRef = operNode.getReference().toString();
+            int lastDot = operRef.lastIndexOf('.');
+            if (lastDot < 0) return null;
+            String doRef = operRef.substring(0, lastDot);
+            ModelNode laeNode = serverModel.findModelNode(doRef + ".LastApplError", Fc.CO);
+            if (laeNode instanceof FcModelNode) {
+                try { association.getDataValues((FcModelNode) laeNode); } catch (Exception ignore) {}
+                StringBuilder sb = new StringBuilder();
+                if (laeNode.getChildren() != null) {
+                    for (ModelNode child : laeNode.getChildren()) {
+                        String n = child.getName();
+                        if ("error".equals(n) || "addCause".equals(n)) {
+                            String v = formatValue(child);
+                            if (v != null && !v.isEmpty()) {
+                                sb.append(n).append("=").append(v).append(" ");
+                            }
+                        }
+                    }
+                }
+                return sb.length() > 0 ? sb.toString().trim() : null;
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
+    /**
+     * Operación de control unificada: detecta ctlModel y ejecuta el flujo correcto.
+     *
+     * Flujo:
+     *   ctlModel 0 (status-only) → error inmediato, no se envía nada al IED
+     *   ctlModel 1 (direct-normal-security) → operate()
+     *   ctlModel 2 (sbo-normal-security)    → select() → operate()
+     *   ctlModel 3 (direct-enhanced-security) → operate()
+     *   ctlModel 4 (sbo-enhanced-security)  → select() → operate()
+     *
+     * @param operNode  nodo Oper (FC=CO) obtenido del ServerModel
+     * @param ctlValStr valor de control como string ("true"/"false", "on"/"off", float, etc.)
+     * @param testFlag  si true, el IED registra el evento pero no actúa en hardware
+     * @param orIdent   identificador del operador (cadena libre, puede ser null)
+     */
+    public ControlResult operateControl(FcModelNode operNode, String ctlValStr,
+                                         boolean testFlag, String orIdent) throws IOException {
+        if (!isConnected()) throw new IOException("Not connected");
+
+        int ctlModel = getCtlModelValue(operNode);
+        String ctlModelName = CTL_MODEL_MAP.getOrDefault(ctlModel, "unknown(" + ctlModel + ")");
+
+        if (ctlModel == 0) {
+            return ControlResult.fail(ctlModel, ctlModelName,
+                "Nodo status-only (ctlModel=0): no acepta comandos", null);
+        }
+
+        // Preparar estructura Oper completa
+        setOperCtlVal(operNode, ctlValStr);
+        fillControlStructure(operNode, testFlag, orIdent);
+
+        try {
+            if (ctlModel == 2 || ctlModel == 4) {
+                // SBO: enviar SELECT primero
+                System.out.println("[SBO] SELECT → " + operNode.getReference());
+                boolean selected = association.select(operNode);
+                if (!selected) {
+                    String lastErr = readLastApplError(operNode);
+                    System.out.println("[SBO] SELECT rechazado. LastApplError: " + lastErr);
+                    return ControlResult.fail(ctlModel, ctlModelName,
+                        "SELECT rechazado por el IED", lastErr);
+                }
+                System.out.println("[SBO] SELECT aceptado. Enviando OPERATE...");
+            }
+
+            association.operate(operNode);
+            System.out.println("[OK] OPERATE ejecutado: " + operNode.getReference()
+                + " = " + ctlValStr + (testFlag ? " [TEST MODE]" : ""));
+            return ControlResult.ok(ctlModel, ctlModelName);
+
+        } catch (ServiceError e) {
+            String lastErr = readLastApplError(operNode);
+            System.out.println("[ERROR] OPERATE falló: ServiceError " + e.getErrorCode()
+                + (lastErr != null ? " | LastApplError: " + lastErr : ""));
+            return ControlResult.fail(ctlModel, ctlModelName,
+                "ServiceError: " + e.getErrorCode(), lastErr);
         }
     }
 }

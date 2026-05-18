@@ -1352,6 +1352,18 @@ public class IEDNavigatorApp extends JFrame {
 
         treePopupMenu.addSeparator();
 
+        // FC=CO: Operar nodo de control (SBO o direct según ctlModel del IED)
+        JMenuItem miOperate = new JMenuItem("Operar... (FC=CO)");
+        miOperate.setFont(miOperate.getFont().deriveFont(Font.BOLD));
+        miOperate.setForeground(new Color(183, 28, 28));
+        miOperate.addActionListener(e -> {
+            FcModelNode operNode = getOperNodeForSelection();
+            if (operNode != null) showControlDialog(operNode);
+        });
+        treePopupMenu.add(miOperate);
+
+        treePopupMenu.addSeparator();
+
         // FC=BL: Bloquear / Desbloquear valor del DO
         JMenuItem miBlock   = new JMenuItem("Bloquear valor (blkEna=true)");
         JMenuItem miUnblock = new JMenuItem("Desbloquear valor (blkEna=false)");
@@ -1360,9 +1372,11 @@ public class IEDNavigatorApp extends JFrame {
         treePopupMenu.add(miBlock);
         treePopupMenu.add(miUnblock);
 
-        // Mostrar/ocultar ítems BL según el nodo seleccionado
+        // Mostrar/ocultar ítems según el nodo seleccionado
         treePopupMenu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
             public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                FcModelNode operNode = getOperNodeForSelection();
+                miOperate.setVisible(operNode != null);
                 boolean hasBlk = getSelectedBlkEnaNode() != null;
                 miBlock.setVisible(hasBlk);
                 miUnblock.setVisible(hasBlk);
@@ -1731,6 +1745,200 @@ public class IEDNavigatorApp extends JFrame {
     private void selectSclFile()       { connectionManager.selectSclFile(); }
     private void toggleServer()        { connectionManager.toggleServer(); }
     private void toggleConnection()    { connectionManager.toggleConnection(); }
+
+    // ── Control de nodos FC=CO (SBO + Direct) ───────────────────────────────────────────
+
+    /**
+     * Busca el nodo Oper (FC=CO) a partir del nodo seleccionado en el árbol.
+     * Soporta:
+     *   - El propio nodo Oper (nombre="Oper", FC=CO)
+     *   - Un FcDataObject con FC=CO que contiene un hijo "Oper"
+     * Retorna null si el nodo seleccionado no tiene un punto de control operable.
+     */
+    private FcModelNode getOperNodeForSelection() {
+        if (!isConnected || client == null) return null;
+        TreePath path = modelTree.getSelectionPath();
+        if (path == null) return null;
+        DefaultMutableTreeNode treeNode = (DefaultMutableTreeNode) path.getLastPathComponent();
+        if (!(treeNode.getUserObject() instanceof NodeInfo)) return null;
+        NodeInfo info = (NodeInfo) treeNode.getUserObject();
+        if (!(info.node instanceof FcModelNode)) return null;
+        FcModelNode fcNode = (FcModelNode) info.node;
+
+        // Caso 1: el nodo ES el Oper (FC=CO, nombre="Oper")
+        if (fcNode.getFc() == Fc.CO && "Oper".equals(fcNode.getName())) {
+            return fcNode;
+        }
+
+        // Caso 2: FcDataObject con FC=CO → buscar hijo llamado "Oper"
+        if (fcNode.getFc() == Fc.CO && fcNode.getChildren() != null) {
+            for (ModelNode child : fcNode.getChildren()) {
+                if ("Oper".equals(child.getName()) && child instanceof FcModelNode) {
+                    return (FcModelNode) child;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Muestra el diálogo de control para un nodo Oper (FC=CO).
+     *
+     * El diálogo detecta el ctlModel del IED y muestra:
+     *   - Referencia del nodo y modelo de control (direct / SBO)
+     *   - Controles de valor adaptados al tipo de ctlVal (Boolean → ON/OFF, DoubleBit → 4 estados,
+     *     Float → campo numérico, TapCommand → RAISE/LOWER/STOP, genérico → texto libre)
+     *   - Checkbox "Modo Test" (el IED registra pero no actúa en hardware)
+     *   - Campo identificador del operador (orIdent, opcional)
+     *
+     * La operación se ejecuta en el backgroundExecutor para no bloquear el EDT.
+     */
+    private void showControlDialog(FcModelNode operNode) {
+        String ref = operNode.getReference().toString();
+        int ctlModel = client.getCtlModelValue(operNode);
+        String ctlModelName = new String[]{
+            "status-only", "direct-normal-security", "sbo-normal-security",
+            "direct-enhanced-security", "sbo-enhanced-security"
+        }[Math.min(ctlModel, 4)];
+        boolean isSbo = (ctlModel == 2 || ctlModel == 4);
+        String ctlValType = client.getOperCtlValType(operNode);
+
+        // ── Construir panel del diálogo ──────────────────────────────────────────
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(4, 6, 4, 6);
+        g.anchor = GridBagConstraints.WEST;
+        g.fill = GridBagConstraints.HORIZONTAL;
+
+        // Info del nodo
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        JLabel lblRef = new JLabel("<html><b>" + ref + "</b></html>");
+        panel.add(lblRef, g);
+
+        g.gridy = 1;
+        Color ctlColor = isSbo ? new Color(183, 28, 28) : new Color(0, 100, 0);
+        JLabel lblModel = new JLabel("Modelo de control: " + ctlModelName);
+        lblModel.setForeground(ctlColor);
+        panel.add(lblModel, g);
+
+        if (isSbo) {
+            g.gridy = 2;
+            JLabel lblSboNote = new JLabel(
+                "<html><i>SELECT → OPERATE (SBO): el IED reservará el nodo antes de ejecutar.</i></html>");
+            lblSboNote.setFont(lblSboNote.getFont().deriveFont(Font.ITALIC, 11f));
+            panel.add(lblSboNote, g);
+        }
+
+        g.gridwidth = 1;
+
+        // Selector de valor según tipo
+        g.gridy = 3; g.gridx = 0;
+        panel.add(new JLabel("Valor:"), g);
+        g.gridx = 1;
+
+        // Devuelve el string del valor seleccionado; null = cancelado
+        final String[] selectedValue = {null};
+
+        if ("DoubleBitPos".equals(ctlValType) || "DoubleBit".equals(ctlValType)) {
+            String[] opts = {"on", "off", "intermediate", "bad"};
+            JComboBox<String> combo = new JComboBox<>(opts);
+            panel.add(combo, g);
+            selectedValue[0] = "on"; // default
+            combo.addActionListener(e -> selectedValue[0] = (String) combo.getSelectedItem());
+        } else if ("Boolean".equals(ctlValType)) {
+            JComboBox<String> combo = new JComboBox<>(new String[]{"true", "false"});
+            panel.add(combo, g);
+            selectedValue[0] = "true";
+            combo.addActionListener(e -> selectedValue[0] = (String) combo.getSelectedItem());
+        } else if ("TapCommand".equals(ctlValType)) {
+            JComboBox<String> combo = new JComboBox<>(new String[]{"stop", "lower", "higher"});
+            panel.add(combo, g);
+            selectedValue[0] = "stop";
+            combo.addActionListener(e -> selectedValue[0] = (String) combo.getSelectedItem());
+        } else {
+            // Float, Int, genérico → campo de texto
+            JTextField tfVal = new JTextField("0", 12);
+            panel.add(tfVal, g);
+            selectedValue[0] = "0";
+            tfVal.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                public void insertUpdate(javax.swing.event.DocumentEvent e)  { selectedValue[0] = tfVal.getText(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e)  { selectedValue[0] = tfVal.getText(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { selectedValue[0] = tfVal.getText(); }
+            });
+        }
+
+        // Test flag
+        g.gridy = 4; g.gridx = 0; g.gridwidth = 2;
+        JCheckBox cbTest = new JCheckBox(
+            "Modo Test — el IED registra el evento pero NO actúa en hardware");
+        cbTest.setForeground(new Color(150, 70, 0));
+        panel.add(cbTest, g);
+
+        // orIdent
+        g.gridy = 5; g.gridwidth = 1; g.gridx = 0;
+        panel.add(new JLabel("Operador (orIdent):"), g);
+        g.gridx = 1;
+        JTextField tfOrIdent = new JTextField("IEDNavigator", 14);
+        panel.add(tfOrIdent, g);
+
+        // ── Mostrar diálogo ──────────────────────────────────────────────────────
+        String title = isSbo ? "Operar nodo — SBO" : "Operar nodo — Direct";
+        int result = JOptionPane.showConfirmDialog(this, panel, title,
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+
+        if (result != JOptionPane.OK_OPTION || selectedValue[0] == null) return;
+
+        final String ctlVal  = selectedValue[0].trim();
+        final boolean testFlag = cbTest.isSelected();
+        final String orIdent   = tfOrIdent.getText().trim();
+
+        // ── Ejecutar en background ───────────────────────────────────────────────
+        backgroundExecutor.submit(() -> {
+            try {
+                IEC61850Client.ControlResult cr =
+                    client.operateControl(operNode, ctlVal, testFlag, orIdent);
+
+                SwingUtilities.invokeLater(() -> {
+                    if (cr.success) {
+                        String msg = "OPERATE exitoso\n"
+                            + "  Nodo: " + ref + "\n"
+                            + "  Valor: " + ctlVal + "\n"
+                            + "  Modelo: " + cr.ctlModelName
+                            + (isSbo ? " (SELECT → OPERATE)" : "")
+                            + (testFlag ? "\n  [MODO TEST activado]" : "");
+                        log("[CONTROL OK] " + ref + " = " + ctlVal
+                            + (testFlag ? " [TEST]" : "")
+                            + " via " + cr.ctlModelName);
+                        JOptionPane.showMessageDialog(IEDNavigatorApp.this, msg,
+                            "Control exitoso", JOptionPane.INFORMATION_MESSAGE);
+                        // Refrescar el nodo en el árbol
+                        updateSingleNodeInTree(ref.substring(0, ref.lastIndexOf('.')));
+                    } else {
+                        StringBuilder msg = new StringBuilder();
+                        msg.append("OPERATE rechazado por el IED\n\n");
+                        msg.append("  Nodo: ").append(ref).append("\n");
+                        msg.append("  Modelo: ").append(cr.ctlModelName).append("\n");
+                        msg.append("  Error: ").append(cr.error);
+                        if (cr.lastApplError != null) {
+                            msg.append("\n  LastApplError: ").append(cr.lastApplError);
+                        }
+                        log("[CONTROL ERROR] " + ref + " — " + cr.error
+                            + (cr.lastApplError != null ? " | " + cr.lastApplError : ""));
+                        JOptionPane.showMessageDialog(IEDNavigatorApp.this, msg.toString(),
+                            "Control rechazado", JOptionPane.ERROR_MESSAGE);
+                    }
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    log("[CONTROL EXCEPTION] " + ref + " — " + ex.getMessage());
+                    JOptionPane.showMessageDialog(IEDNavigatorApp.this,
+                        "Error de comunicación:\n" + ex.getMessage(),
+                        "Error de control", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+        });
+    }
 
     // ── Diagnostico de puerto ────────────────────────────────────────────────
 
