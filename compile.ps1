@@ -11,8 +11,8 @@ if (!(Test-Path $CLASSDIR)) { New-Item -ItemType Directory -Path $CLASSDIR }
 $jars = Get-ChildItem -Path $LIBDIR -Filter '*.jar' | ForEach-Object { $_.FullName }
 $CP = $jars -join ';'
 
-# Collect all .java files recursively
-$sources = Get-ChildItem -Path $SRCDIR -Recurse -Filter '*.java' | ForEach-Object { $_.FullName }
+# Collect .java files from com.iednavigator only (com.iedexplorer is the old renamed package)
+$sources = Get-ChildItem -Path "$SRCDIR\com\iednavigator" -Recurse -Filter '*.java' | ForEach-Object { $_.FullName }
 
 Write-Host "Compiling Java files..."
 Write-Host "JAVA_HOME: $env:JAVA_HOME"
@@ -23,7 +23,7 @@ Write-Host "Source files: $($sources.Count)"
 $argfile = "$env:TEMP\ied_sources.txt"
 $sources | ForEach-Object { '"' + ($_ -replace '\\', '/') + '"' } | Out-File -FilePath $argfile -Encoding ascii
 
-& $JAVAC -d $CLASSDIR -cp $CP -encoding UTF-8 "@$argfile" 2>&1
+& $JAVAC -d $CLASSDIR -cp $CP -encoding UTF-8 --release 11 "@$argfile" 2>&1
 
 Remove-Item $argfile -ErrorAction SilentlyContinue
 

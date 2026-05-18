@@ -104,9 +104,9 @@ class IconFactory {
 
     static Icon createBreakerIcon(String state) {
         return new Icon() {
-            private static final Color COLOR_ON           = new Color(0, 180, 0);
-            private static final Color COLOR_OFF          = new Color(220, 50, 50);
-            private static final Color COLOR_INTERMEDIATE = new Color(255, 165, 0);
+            private final Color COLOR_ON           = new Color(0, 180, 0);
+            private final Color COLOR_OFF          = new Color(220, 50, 50);
+            private final Color COLOR_INTERMEDIATE = new Color(255, 165, 0);
 
             @Override
             public void paintIcon(Component c, Graphics g, int x, int y) {
@@ -145,9 +145,9 @@ class IconFactory {
 
     static Icon createLargeBreakerIcon(String state) {
         return new Icon() {
-            private static final Color COLOR_ON           = new Color(0, 180, 0);
-            private static final Color COLOR_OFF          = new Color(220, 50, 50);
-            private static final Color COLOR_INTERMEDIATE = new Color(255, 165, 0);
+            private final Color COLOR_ON           = new Color(0, 180, 0);
+            private final Color COLOR_OFF          = new Color(220, 50, 50);
+            private final Color COLOR_INTERMEDIATE = new Color(255, 165, 0);
 
             @Override
             public void paintIcon(Component c, Graphics g, int x, int y) {
