@@ -1362,6 +1362,15 @@ public class IEDNavigatorApp extends JFrame {
         });
         treePopupMenu.add(miOperate);
 
+        // FC=CO: Cancelar SELECT pendiente (solo para ctlModel SBO = 2 o 4)
+        JMenuItem miCancelSelect = new JMenuItem("Cancelar SELECT (SBO)");
+        miCancelSelect.setForeground(new Color(120, 50, 150));
+        miCancelSelect.addActionListener(e -> {
+            FcModelNode operNode = getOperNodeForSelection();
+            if (operNode != null) showCancelDialog(operNode);
+        });
+        treePopupMenu.add(miCancelSelect);
+
         treePopupMenu.addSeparator();
 
         // FC=BL: Bloquear / Desbloquear valor del DO
@@ -1377,6 +1386,9 @@ public class IEDNavigatorApp extends JFrame {
             public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
                 FcModelNode operNode = getOperNodeForSelection();
                 miOperate.setVisible(operNode != null);
+                boolean isSbo = operNode != null && client != null
+                    && (client.getCtlModelValue(operNode) == 2 || client.getCtlModelValue(operNode) == 4);
+                miCancelSelect.setVisible(isSbo);
                 boolean hasBlk = getSelectedBlkEnaNode() != null;
                 miBlock.setVisible(hasBlk);
                 miUnblock.setVisible(hasBlk);
@@ -1935,6 +1947,78 @@ public class IEDNavigatorApp extends JFrame {
                     JOptionPane.showMessageDialog(IEDNavigatorApp.this,
                         "Error de comunicación:\n" + ex.getMessage(),
                         "Error de control", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+        });
+    }
+
+    /**
+     * Diálogo para cancelar un SELECT pendiente en el IED (ctlModel SBO = 2 o 4).
+     * Envía el servicio CANCEL al nodo Cancel del DO de control.
+     */
+    private void showCancelDialog(FcModelNode operNode) {
+        String ref = operNode.getReference().toString();
+        int ctlModel = client.getCtlModelValue(operNode);
+        String ctlModelName = new String[]{
+            "status-only", "direct-normal-security", "sbo-normal-security",
+            "direct-enhanced-security", "sbo-enhanced-security"
+        }[Math.min(ctlModel, 4)];
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(4, 6, 4, 6);
+        g.anchor = GridBagConstraints.WEST;
+        g.fill = GridBagConstraints.HORIZONTAL;
+
+        g.gridx = 0; g.gridy = 0; g.gridwidth = 2;
+        panel.add(new JLabel("<html><b>" + ref + "</b></html>"), g);
+
+        g.gridy = 1;
+        JLabel lblModel = new JLabel("Modelo de control: " + ctlModelName);
+        lblModel.setForeground(new Color(120, 50, 150));
+        panel.add(lblModel, g);
+
+        g.gridy = 2;
+        panel.add(new JLabel(
+            "<html><i>Envía CANCEL al IED para liberar el SELECT pendiente.</i></html>"), g);
+
+        g.gridy = 3; g.gridwidth = 1; g.gridx = 0;
+        panel.add(new JLabel("Operador (orIdent):"), g);
+        g.gridx = 1;
+        JTextField tfOrIdent = new JTextField("IEDNavigator", 14);
+        panel.add(tfOrIdent, g);
+
+        int result = JOptionPane.showConfirmDialog(this, panel,
+            "Cancelar SELECT (SBO)", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) return;
+
+        final String orIdent = tfOrIdent.getText().trim();
+        backgroundExecutor.submit(() -> {
+            try {
+                IEC61850Client.ControlResult cr = client.cancelControl(operNode, orIdent);
+                SwingUtilities.invokeLater(() -> {
+                    if (cr.success) {
+                        log("[CANCEL OK] " + ref + " — SELECT liberado via " + cr.ctlModelName);
+                        JOptionPane.showMessageDialog(IEDNavigatorApp.this,
+                            "CANCEL enviado correctamente.\nEl SELECT en el IED ha sido liberado.\n\nNodo: " + ref,
+                            "Cancel exitoso", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        StringBuilder msg = new StringBuilder("CANCEL rechazado por el IED\n\n");
+                        msg.append("  Nodo: ").append(ref).append("\n");
+                        msg.append("  Error: ").append(cr.error);
+                        if (cr.lastApplError != null)
+                            msg.append("\n  LastApplError: ").append(cr.lastApplError);
+                        log("[CANCEL ERROR] " + ref + " — " + cr.error);
+                        JOptionPane.showMessageDialog(IEDNavigatorApp.this, msg.toString(),
+                            "Cancel rechazado", JOptionPane.ERROR_MESSAGE);
+                    }
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    log("[CANCEL EXCEPTION] " + ref + " — " + ex.getMessage());
+                    JOptionPane.showMessageDialog(IEDNavigatorApp.this,
+                        "Error de comunicación:\n" + ex.getMessage(),
+                        "Error de cancel", JOptionPane.ERROR_MESSAGE);
                 });
             }
         });

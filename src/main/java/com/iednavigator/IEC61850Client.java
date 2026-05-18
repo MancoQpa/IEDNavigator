@@ -1289,14 +1289,72 @@ public class IEC61850Client implements ClientEventListener {
     }
 
     /**
+     * Busca el nodo Cancel (FC=CO) como hermano de Oper dentro del mismo DO de control.
+     * Retorna null si no existe en el modelo (IEDs con ctlModel=1/3 no lo incluyen).
+     */
+    private FcModelNode findCancelNode(FcModelNode operNode) {
+        ModelNode parent = operNode.getParent();
+        if (parent == null) return null;
+        ModelNode cancel = parent.getChild("Cancel");
+        if (cancel instanceof FcModelNode) return (FcModelNode) cancel;
+        return null;
+    }
+
+    /**
+     * Cancela un SELECT pendiente en el IED (aplica a ctlModel=2 y ctlModel=4).
+     * Escribe al nodo Cancel (FC=CO, hermano de Oper) con los campos de identificación.
+     *
+     * Nota: según IEC 61850-7-2 §20.8, el ctlNum del CANCEL debería coincidir con el
+     * del SELECT original. Esta implementación envía un ctlNum nuevo; si el IED es
+     * estricto y rechaza, el SELECT expirará según su SBO_Timeout interno.
+     *
+     * @param operNode nodo Oper del DO de control
+     * @param orIdent  identificador del operador (puede ser null)
+     */
+    public ControlResult cancelControl(FcModelNode operNode, String orIdent) throws IOException {
+        if (!isConnected()) throw new IOException("Not connected");
+
+        int ctlModel = getCtlModelValue(operNode);
+        String ctlModelName = CTL_MODEL_MAP.getOrDefault(ctlModel, "unknown(" + ctlModel + ")");
+
+        if (ctlModel != 2 && ctlModel != 4) {
+            return ControlResult.fail(ctlModel, ctlModelName,
+                "CANCEL solo aplica a ctlModel SBO (2 o 4); este nodo es: " + ctlModelName, null);
+        }
+
+        FcModelNode cancelNode = findCancelNode(operNode);
+        if (cancelNode == null) {
+            return ControlResult.fail(ctlModel, ctlModelName,
+                "Nodo Cancel no encontrado en el modelo del IED", null);
+        }
+
+        // Poblar Cancel: origin + ctlNum + T; sin ctlVal (Cancel no altera el proceso)
+        fillControlStructure(cancelNode, false, orIdent);
+
+        try {
+            association.setDataValues(cancelNode);
+            System.out.println("[SBO] CANCEL enviado: " + operNode.getReference());
+            return ControlResult.ok(ctlModel, ctlModelName);
+        } catch (ServiceError e) {
+            String lastErr = readLastApplError(operNode);
+            System.out.println("[ERROR] CANCEL rechazado: ServiceError " + e.getErrorCode()
+                + (lastErr != null ? " | LastApplError: " + lastErr : ""));
+            return ControlResult.fail(ctlModel, ctlModelName,
+                "CANCEL ServiceError: " + e.getErrorCode(), lastErr);
+        }
+    }
+
+    /**
      * Operación de control unificada: detecta ctlModel y ejecuta el flujo correcto.
      *
      * Flujo:
      *   ctlModel 0 (status-only) → error inmediato, no se envía nada al IED
      *   ctlModel 1 (direct-normal-security) → operate()
      *   ctlModel 2 (sbo-normal-security)    → select() → operate()
-     *   ctlModel 3 (direct-enhanced-security) → operate()
-     *   ctlModel 4 (sbo-enhanced-security)  → select() → operate()
+     *   ctlModel 3 (direct-enhanced-security) → operate() con campos enhanced
+     *   ctlModel 4 (sbo-enhanced-security)  → selectWithValue() → operate()
+     *     (iec61850bean select() acepta el Oper completo con ctlVal ya seteado,
+     *      lo que equivale a SELECT-WITH-VALUE sobre el nodo SBOw)
      *
      * @param operNode  nodo Oper (FC=CO) obtenido del ServerModel
      * @param ctlValStr valor de control como string ("true"/"false", "on"/"off", float, etc.)
