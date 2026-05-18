@@ -1229,6 +1229,22 @@ public class IEC61850Client implements ClientEventListener {
      * Los campos no presentes en el modelo se ignoran silenciosamente.
      */
     private void fillControlStructure(FcModelNode operNode, boolean testFlag, String orIdent) {
+        fillControlStructure(operNode, testFlag, orIdent, false, false);
+    }
+
+    /**
+     * Rellena los campos de la estructura Oper excepto ctlVal (que se setea por separado):
+     *   - origin.orCat = 3 (remote-control)
+     *   - origin.orIdent = orIdent (UTF-8 bytes)
+     *   - ctlNum = ++ctlNumCounter (0-255 circular)
+     *   - T = hora actual
+     *   - Test = testFlag
+     *   - Check.synchroChk = synchroCheck   (sincronismo: tensión, ángulo y frecuencia)
+     *   - Check.interlkChk = interlockCheck  (enclavamiento lógico del IED)
+     * Los campos no presentes en el modelo se ignoran silenciosamente.
+     */
+    private void fillControlStructure(FcModelNode operNode, boolean testFlag, String orIdent,
+                                       boolean synchroCheck, boolean interlockCheck) {
         if (operNode.getChildren() == null) return;
         for (ModelNode child : operNode.getChildren()) {
             String name = child.getName();
@@ -1251,8 +1267,10 @@ public class IEC61850Client implements ClientEventListener {
                 ((BdaTimestamp) child).setCurrentTime();
             } else if ("Test".equals(name) && child instanceof BdaBoolean) {
                 ((BdaBoolean) child).setValue(testFlag);
+            } else if ("Check".equals(name) && child instanceof BdaCheck) {
+                ((BdaCheck) child).setSynchrocheck(synchroCheck);
+                ((BdaCheck) child).setInterlockCheck(interlockCheck);
             }
-            // Check: se dejan los valores por defecto del modelo
         }
     }
 
@@ -1356,13 +1374,16 @@ public class IEC61850Client implements ClientEventListener {
      *     (iec61850bean select() acepta el Oper completo con ctlVal ya seteado,
      *      lo que equivale a SELECT-WITH-VALUE sobre el nodo SBOw)
      *
-     * @param operNode  nodo Oper (FC=CO) obtenido del ServerModel
-     * @param ctlValStr valor de control como string ("true"/"false", "on"/"off", float, etc.)
-     * @param testFlag  si true, el IED registra el evento pero no actúa en hardware
-     * @param orIdent   identificador del operador (cadena libre, puede ser null)
+     * @param operNode      nodo Oper (FC=CO) obtenido del ServerModel
+     * @param ctlValStr     valor de control como string ("true"/"false", "on"/"off", float, etc.)
+     * @param testFlag      si true, el IED registra el evento pero no actúa en hardware
+     * @param orIdent       identificador del operador (cadena libre, puede ser null)
+     * @param synchroCheck  activar verificación de sincronismo (tensión, ángulo, frecuencia)
+     * @param interlockCheck activar verificación de enclavamiento lógico del IED
      */
     public ControlResult operateControl(FcModelNode operNode, String ctlValStr,
-                                         boolean testFlag, String orIdent) throws IOException {
+                                         boolean testFlag, String orIdent,
+                                         boolean synchroCheck, boolean interlockCheck) throws IOException {
         if (!isConnected()) throw new IOException("Not connected");
 
         int ctlModel = getCtlModelValue(operNode);
@@ -1375,7 +1396,7 @@ public class IEC61850Client implements ClientEventListener {
 
         // Preparar estructura Oper completa
         setOperCtlVal(operNode, ctlValStr);
-        fillControlStructure(operNode, testFlag, orIdent);
+        fillControlStructure(operNode, testFlag, orIdent, synchroCheck, interlockCheck);
 
         try {
             if (ctlModel == 2 || ctlModel == 4) {
@@ -1403,5 +1424,11 @@ public class IEC61850Client implements ClientEventListener {
             return ControlResult.fail(ctlModel, ctlModelName,
                 "ServiceError: " + e.getErrorCode(), lastErr);
         }
+    }
+
+    /** Overload sin Check — equivale a Check=0 (sin verificaciones). */
+    public ControlResult operateControl(FcModelNode operNode, String ctlValStr,
+                                         boolean testFlag, String orIdent) throws IOException {
+        return operateControl(operNode, ctlValStr, testFlag, orIdent, false, false);
     }
 }

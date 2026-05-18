@@ -1887,8 +1887,21 @@ public class IEDNavigatorApp extends JFrame {
         cbTest.setForeground(new Color(150, 70, 0));
         panel.add(cbTest, g);
 
+        // Check field (IEC 61850-7-2: synchroChk + interlkChk)
+        g.gridy = 5;
+        JCheckBox cbSynchro = new JCheckBox(
+            "synchroChk — verificar sincronismo (tensión, ángulo, frecuencia)");
+        cbSynchro.setToolTipText("Check.synchroChk: el IED verifica sincronismo antes de operar");
+        panel.add(cbSynchro, g);
+
+        g.gridy = 6;
+        JCheckBox cbInterlock = new JCheckBox(
+            "interlkChk — verificar enclavamiento lógico del IED");
+        cbInterlock.setToolTipText("Check.interlkChk: el IED verifica enclavamientos antes de operar");
+        panel.add(cbInterlock, g);
+
         // orIdent
-        g.gridy = 5; g.gridwidth = 1; g.gridx = 0;
+        g.gridy = 7; g.gridwidth = 1; g.gridx = 0;
         panel.add(new JLabel("Operador (orIdent):"), g);
         g.gridx = 1;
         JTextField tfOrIdent = new JTextField("IEDNavigator", 14);
@@ -1901,26 +1914,35 @@ public class IEDNavigatorApp extends JFrame {
 
         if (result != JOptionPane.OK_OPTION || selectedValue[0] == null) return;
 
-        final String ctlVal  = selectedValue[0].trim();
-        final boolean testFlag = cbTest.isSelected();
-        final String orIdent   = tfOrIdent.getText().trim();
+        final String ctlVal       = selectedValue[0].trim();
+        final boolean testFlag    = cbTest.isSelected();
+        final boolean synchroCheck  = cbSynchro.isSelected();
+        final boolean interlockCheck = cbInterlock.isSelected();
+        final String orIdent      = tfOrIdent.getText().trim();
 
         // ── Ejecutar en background ───────────────────────────────────────────────
         backgroundExecutor.submit(() -> {
             try {
                 IEC61850Client.ControlResult cr =
-                    client.operateControl(operNode, ctlVal, testFlag, orIdent);
+                    client.operateControl(operNode, ctlVal, testFlag, orIdent,
+                                          synchroCheck, interlockCheck);
 
                 SwingUtilities.invokeLater(() -> {
                     if (cr.success) {
+                        String checkInfo = (synchroCheck || interlockCheck)
+                            ? "\n  Check: " + (synchroCheck ? "synchroChk " : "")
+                              + (interlockCheck ? "interlkChk" : "") : "";
                         String msg = "OPERATE exitoso\n"
                             + "  Nodo: " + ref + "\n"
                             + "  Valor: " + ctlVal + "\n"
                             + "  Modelo: " + cr.ctlModelName
                             + (isSbo ? " (SELECT → OPERATE)" : "")
-                            + (testFlag ? "\n  [MODO TEST activado]" : "");
+                            + (testFlag ? "\n  [MODO TEST activado]" : "")
+                            + checkInfo;
                         log("[CONTROL OK] " + ref + " = " + ctlVal
                             + (testFlag ? " [TEST]" : "")
+                            + (synchroCheck ? " [SYNCHRO]" : "")
+                            + (interlockCheck ? " [INTERLOCK]" : "")
                             + " via " + cr.ctlModelName);
                         JOptionPane.showMessageDialog(IEDNavigatorApp.this, msg,
                             "Control exitoso", JOptionPane.INFORMATION_MESSAGE);
