@@ -350,36 +350,78 @@ public class IEC61850Client implements ClientEventListener {
 
     // ── Mapas de decodificación de enums IEC 61850-7-3 / IEC 61850-7-4 ─────────
 
-    private static final Map<Integer, String> SI_UNIT_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> SI_UNIT_MAP  = new LinkedHashMap<>();
     private static final Map<Integer, String> CTL_MODEL_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> HEALTH_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> MOD_BEH_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> RANGE_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> DIR_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> OR_CATEGORY_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> AUTO_REC_ST_MAP = new LinkedHashMap<>();
-    private static final Map<Integer, String> FLT_LOOP_MAP = new LinkedHashMap<>();
+    private static final Map<Integer, String> HEALTH_MAP    = new LinkedHashMap<>();
+    private static final Map<Integer, String> MOD_BEH_MAP   = new LinkedHashMap<>();
+    private static final Map<Integer, String> RANGE_MAP     = new LinkedHashMap<>();
+    private static final Map<Integer, String> DIR_MAP       = new LinkedHashMap<>();
+    private static final Map<Integer, String> OR_CATEGORY_MAP  = new LinkedHashMap<>();
+    private static final Map<Integer, String> AUTO_REC_ST_MAP  = new LinkedHashMap<>();
+    private static final Map<Integer, String> FLT_LOOP_MAP     = new LinkedHashMap<>();
+    /** UnitMultiplier (IEC 61850-7-3 / IEC 61968-9 CIM): prefijos SI. */
+    private static final Map<Integer, String> MULTIPLIER_MAP   = new LinkedHashMap<>();
+    /** AddCause (IEC 61850-7-3:2010 Table 9): causa de rechazo de control. */
+    private static final Map<Integer, String> ADD_CAUSE_MAP    = new LinkedHashMap<>();
 
     static {
-        // IEC 61850-7-3 §20 — códigos de unidad SIUnit
-        SI_UNIT_MAP.put(0,  "none");  SI_UNIT_MAP.put(1,  "m");
-        SI_UNIT_MAP.put(2,  "kg");    SI_UNIT_MAP.put(3,  "s");
-        SI_UNIT_MAP.put(4,  "A");     SI_UNIT_MAP.put(8,  "K");
-        SI_UNIT_MAP.put(11, "deg");   SI_UNIT_MAP.put(21, "Gy");
-        SI_UNIT_MAP.put(23, "°C");    SI_UNIT_MAP.put(25, "F");
-        SI_UNIT_MAP.put(26, "C");     SI_UNIT_MAP.put(27, "S");
-        SI_UNIT_MAP.put(28, "H");     SI_UNIT_MAP.put(29, "V");
-        SI_UNIT_MAP.put(30, "Ω");     SI_UNIT_MAP.put(31, "J");
-        SI_UNIT_MAP.put(32, "N");     SI_UNIT_MAP.put(33, "Hz");
-        SI_UNIT_MAP.put(35, "lm");    SI_UNIT_MAP.put(36, "lx");
-        SI_UNIT_MAP.put(37, "Wb");    SI_UNIT_MAP.put(38, "T");
-        SI_UNIT_MAP.put(61, "VA");    SI_UNIT_MAP.put(62, "W");
-        SI_UNIT_MAP.put(63, "VAr");   SI_UNIT_MAP.put(64, "φ");
+        // ── SIUnit::UnitSymbol (IEC 61968-9 / CIM, referenciado por IEC 61850-7-3) ──────────
+        // Unidades SI base
+        SI_UNIT_MAP.put(0,  "none"); SI_UNIT_MAP.put(1,  "m");
+        SI_UNIT_MAP.put(2,  "kg");   SI_UNIT_MAP.put(3,  "s");
+        SI_UNIT_MAP.put(4,  "A");    SI_UNIT_MAP.put(5,  "K");
+        SI_UNIT_MAP.put(6,  "mol");  SI_UNIT_MAP.put(7,  "cd");
+        SI_UNIT_MAP.put(8,  "K");    // alias (IEC 61850-7-3 Ed.1)
+        SI_UNIT_MAP.put(9,  "rad");  SI_UNIT_MAP.put(10, "sr");
+        SI_UNIT_MAP.put(11, "deg");  // grado plano (ángulo)
+        // Derivadas radioactividad / termales
+        SI_UNIT_MAP.put(21, "Gy");   SI_UNIT_MAP.put(22, "Bq");
+        SI_UNIT_MAP.put(23, "°C");   SI_UNIT_MAP.put(24, "Sv");
+        // Eléctricas fundamentales
+        SI_UNIT_MAP.put(25, "F");    SI_UNIT_MAP.put(26, "C");
+        SI_UNIT_MAP.put(27, "S");    SI_UNIT_MAP.put(28, "H");
+        SI_UNIT_MAP.put(29, "V");    SI_UNIT_MAP.put(30, "Ω");
+        SI_UNIT_MAP.put(31, "J");    SI_UNIT_MAP.put(32, "N");
+        SI_UNIT_MAP.put(33, "Hz");
+        // Fotometría
+        SI_UNIT_MAP.put(35, "lm");   SI_UNIT_MAP.put(36, "lx");
+        // Magnéticas
+        SI_UNIT_MAP.put(37, "Wb");   SI_UNIT_MAP.put(38, "T");
+        // Mecánica / fluidos / presión
+        SI_UNIT_MAP.put(40, "Pa");   SI_UNIT_MAP.put(41, "m²");
+        SI_UNIT_MAP.put(42, "m³");   SI_UNIT_MAP.put(43, "m/s");
+        SI_UNIT_MAP.put(44, "m/s²"); SI_UNIT_MAP.put(45, "m³/s");
+        SI_UNIT_MAP.put(48, "kg/m³");SI_UNIT_MAP.put(49, "m²/s");
+        SI_UNIT_MAP.put(50, "W/(m·K)");SI_UNIT_MAP.put(51, "J/K");
+        SI_UNIT_MAP.put(52, "ppm");  SI_UNIT_MAP.put(53, "1/s");
+        SI_UNIT_MAP.put(54, "rad/s");SI_UNIT_MAP.put(55, "m/m");
+        SI_UNIT_MAP.put(56, "%");    SI_UNIT_MAP.put(57, "Pa·s");
+        SI_UNIT_MAP.put(58, "N·m");  SI_UNIT_MAP.put(59, "N/m");
+        SI_UNIT_MAP.put(60, "rad/s²");
+        // Potencia eléctrica
+        SI_UNIT_MAP.put(61, "VA");   SI_UNIT_MAP.put(62, "W");
+        SI_UNIT_MAP.put(63, "VAr");  SI_UNIT_MAP.put(64, "φ");
         SI_UNIT_MAP.put(65, "cos(φ)");SI_UNIT_MAP.put(66, "Vs");
-        SI_UNIT_MAP.put(72, "Wh");    SI_UNIT_MAP.put(73, "VAh");
-        SI_UNIT_MAP.put(74, "VArh");  SI_UNIT_MAP.put(75, "V²h");
-        SI_UNIT_MAP.put(76, "A²h");   SI_UNIT_MAP.put(77, "V²");
-        SI_UNIT_MAP.put(78, "A²");
+        SI_UNIT_MAP.put(67, "V²");   SI_UNIT_MAP.put(68, "A·s");
+        SI_UNIT_MAP.put(69, "A/V");  SI_UNIT_MAP.put(70, "V/Hz");
+        SI_UNIT_MAP.put(71, "W/Hz");
+        // Energía eléctrica
+        SI_UNIT_MAP.put(72, "Wh");   SI_UNIT_MAP.put(73, "VAh");
+        SI_UNIT_MAP.put(74, "VArh"); SI_UNIT_MAP.put(75, "V²h");
+        SI_UNIT_MAP.put(76, "A²h");  SI_UNIT_MAP.put(77, "V²");
+        SI_UNIT_MAP.put(78, "A²");   SI_UNIT_MAP.put(79, "A²s");
+        // Irradiancia / densidad de energía
+        SI_UNIT_MAP.put(82, "W/m²"); SI_UNIT_MAP.put(83, "J/m²");
+        SI_UNIT_MAP.put(84, "J/m³"); SI_UNIT_MAP.put(85, "V²/Hz");
+        SI_UNIT_MAP.put(86, "A²/Hz");SI_UNIT_MAP.put(87, "1/Hz");
+        SI_UNIT_MAP.put(88, "S/m");  SI_UNIT_MAP.put(90, "H/m");
+        SI_UNIT_MAP.put(91, "F/m");  SI_UNIT_MAP.put(92, "J/mol");
+        SI_UNIT_MAP.put(93, "C/kg"); SI_UNIT_MAP.put(94, "Gy/s");
+        // Tiempo / unidades prácticas no-SI
+        SI_UNIT_MAP.put(100, "min"); SI_UNIT_MAP.put(101, "h");
+        SI_UNIT_MAP.put(102, "d");   SI_UNIT_MAP.put(103, "°");
+        SI_UNIT_MAP.put(106, "L");   SI_UNIT_MAP.put(108, "t");
+        SI_UNIT_MAP.put(109, "bar"); SI_UNIT_MAP.put(111, "dB");
 
         // ctlModel (IEC 61850-7-3 Table 5)
         CTL_MODEL_MAP.put(0, "status-only");
@@ -437,6 +479,60 @@ public class IEC61850Client implements ClientEventListener {
         FLT_LOOP_MAP.put(5, "PhB-PhC");
         FLT_LOOP_MAP.put(6, "PhA-PhC");
         FLT_LOOP_MAP.put(7, "Others");
+
+        // ── UnitMultiplier (IEC 61850-7-3 / IEC 61968-9 CIM): prefijos SI ─────────────────
+        MULTIPLIER_MAP.put(-24, "y");  // yocto
+        MULTIPLIER_MAP.put(-21, "z");  // zepto
+        MULTIPLIER_MAP.put(-18, "a");  // atto
+        MULTIPLIER_MAP.put(-15, "f");  // femto
+        MULTIPLIER_MAP.put(-12, "p");  // pico
+        MULTIPLIER_MAP.put(-9,  "n");  // nano
+        MULTIPLIER_MAP.put(-6,  "µ");  // micro
+        MULTIPLIER_MAP.put(-3,  "m");  // milli
+        MULTIPLIER_MAP.put(-2,  "c");  // centi
+        MULTIPLIER_MAP.put(-1,  "d");  // deci
+        MULTIPLIER_MAP.put(0,   "");   // none (×1)
+        MULTIPLIER_MAP.put(1,   "da"); // deca
+        MULTIPLIER_MAP.put(2,   "h");  // hecto
+        MULTIPLIER_MAP.put(3,   "k");  // kilo
+        MULTIPLIER_MAP.put(6,   "M");  // mega
+        MULTIPLIER_MAP.put(9,   "G");  // giga
+        MULTIPLIER_MAP.put(12,  "T");  // tera
+        MULTIPLIER_MAP.put(15,  "P");  // peta
+        MULTIPLIER_MAP.put(18,  "E");  // exa
+        MULTIPLIER_MAP.put(21,  "Z");  // zetta
+        MULTIPLIER_MAP.put(24,  "Y");  // yotta
+
+        // ── AddCause (IEC 61850-7-3:2010 Table 9): causa de rechazo de control ────────────
+        ADD_CAUSE_MAP.put(0,  "unknown");
+        ADD_CAUSE_MAP.put(1,  "not-supported");
+        ADD_CAUSE_MAP.put(2,  "blocked-by-switching-hierarchy");
+        ADD_CAUSE_MAP.put(3,  "select-failed");
+        ADD_CAUSE_MAP.put(4,  "invalid-position");
+        ADD_CAUSE_MAP.put(5,  "position-reached");
+        ADD_CAUSE_MAP.put(6,  "parameter-change-in-execution");
+        ADD_CAUSE_MAP.put(7,  "step-limit");
+        ADD_CAUSE_MAP.put(8,  "blocked-by-mode");
+        ADD_CAUSE_MAP.put(9,  "blocked-by-process");
+        ADD_CAUSE_MAP.put(10, "blocked-by-interlocking");
+        ADD_CAUSE_MAP.put(11, "blocked-by-synchrocheck");
+        ADD_CAUSE_MAP.put(12, "command-already-in-execution");
+        ADD_CAUSE_MAP.put(13, "blocked-by-health");
+        ADD_CAUSE_MAP.put(14, "1-of-n-control");
+        ADD_CAUSE_MAP.put(15, "abortion-by-cancel");
+        ADD_CAUSE_MAP.put(16, "time-limit-over");
+        ADD_CAUSE_MAP.put(17, "abortion-by-trip");
+        ADD_CAUSE_MAP.put(18, "object-not-selected");
+        ADD_CAUSE_MAP.put(19, "object-already-selected");
+        ADD_CAUSE_MAP.put(20, "no-access-authority");
+        ADD_CAUSE_MAP.put(21, "ended-with-overshoot");
+        ADD_CAUSE_MAP.put(22, "abortion-due-to-deviation");
+        ADD_CAUSE_MAP.put(23, "abortion-by-communication-loss");
+        ADD_CAUSE_MAP.put(24, "blocked-by-command");
+        ADD_CAUSE_MAP.put(25, "none-of-n-control");
+        ADD_CAUSE_MAP.put(26, "inhibit");
+        ADD_CAUSE_MAP.put(27, "must-be-on");
+        ADD_CAUSE_MAP.put(28, "deactivation-not-possible");
     }
 
     /**
@@ -476,6 +572,10 @@ public class IEC61850Client implements ClientEventListener {
                         return decodeEnum(v, AUTO_REC_ST_MAP, bda);
                     if (name.equals("fltloop"))
                         return decodeEnum(v, FLT_LOOP_MAP, bda);
+                    if (name.equals("multiplier"))
+                        return decodeEnum(v, MULTIPLIER_MAP, bda);
+                    if (name.equals("addcause"))
+                        return decodeEnum(v, ADD_CAUSE_MAP, bda);
                 }
                 return bda.getValueString();
             }
