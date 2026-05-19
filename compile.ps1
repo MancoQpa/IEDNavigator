@@ -1,8 +1,28 @@
-$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot'
-$JAVAC = "$env:JAVA_HOME\bin\javac.exe"
-$SRCDIR = 'C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\src\main\java'
-$LIBDIR = 'C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\lib'
-$CLASSDIR = 'C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer\classes'
+$ROOT     = $PSScriptRoot
+$SRCDIR   = "$ROOT\src\main\java"
+$LIBDIR   = "$ROOT\lib"
+$CLASSDIR = "$ROOT\classes"
+
+# Auto-detectar JDK
+$JAVAHOME = $null
+if ($env:JAVA_HOME -and (Test-Path "$env:JAVA_HOME\bin\javac.exe")) {
+    $JAVAHOME = $env:JAVA_HOME
+} else {
+    foreach ($base in @("C:\Program Files\Eclipse Adoptium","C:\Program Files\Java","C:\Program Files\Microsoft")) {
+        if (Test-Path $base) {
+            $hit = Get-ChildItem $base -Directory | Where-Object { Test-Path "$($_.FullName)\bin\javac.exe" } | Sort-Object Name -Descending | Select-Object -First 1
+            if ($hit) { $JAVAHOME = $hit.FullName; break }
+        }
+    }
+}
+if (-not $JAVAHOME) {
+    try { $jc = (Get-Command javac -ErrorAction Stop).Source; $JAVAHOME = Split-Path (Split-Path $jc) } catch {}
+}
+if (-not $JAVAHOME) {
+    Write-Host "ERROR: JDK no encontrado. Instale JDK 11+ o defina JAVA_HOME." -ForegroundColor Red
+    exit 1
+}
+$JAVAC = "$JAVAHOME\bin\javac.exe"
 
 # Create classes dir if not exists
 if (!(Test-Path $CLASSDIR)) { New-Item -ItemType Directory -Path $CLASSDIR }
