@@ -72,6 +72,7 @@ class ConnectionManager {
         // UI field access (needed inside connection logic)
         String getTfHost();
         String getTfClientPort();
+        int getConnectionTimeoutMs();
         String getTfServerPort();
         void setLblFileName(String text);
         void setStatusIndicatorConnecting();
@@ -575,6 +576,7 @@ class ConnectionManager {
                 ctx.log("Iniciando conexion...");
                 long startTime = System.currentTimeMillis();
 
+                ctx.getClient().setConnectionTimeoutMs(ctx.getConnectionTimeoutMs());
                 ctx.getClient().connect(host, port);
 
                 long elapsed = System.currentTimeMillis() - startTime;

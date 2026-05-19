@@ -73,6 +73,7 @@ public class IEDNavigatorApp extends JFrame {
     private JButton btnConnect;
     private JCheckBox cbPolling;
     private JSpinner spinnerInterval;
+    private JSpinner spinnerTimeout;
 
     // Comunes
     private JLabel lblStatus;
@@ -995,7 +996,15 @@ public class IEDNavigatorApp extends JFrame {
         row2.add(tfClientPort);
         panel.add(row2);
 
-        // Fila 3: Boton Connect
+        // Fila 3: Timeout de conexión
+        JPanel row3t = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        row3t.add(new JLabel("Timeout (s):"));
+        spinnerTimeout = new JSpinner(new SpinnerNumberModel(10, 5, 60, 5));
+        ((JSpinner.DefaultEditor) spinnerTimeout.getEditor()).getTextField().setColumns(3);
+        row3t.add(spinnerTimeout);
+        panel.add(row3t);
+
+        // Fila 4: Boton Connect
         JPanel row3 = new JPanel(new FlowLayout(FlowLayout.LEFT));
         btnConnect = new JButton("Conectar");
         btnConnect.setPreferredSize(new Dimension(200, 35));
@@ -2499,6 +2508,7 @@ public class IEDNavigatorApp extends JFrame {
             public void stopPolling() { IEDNavigatorApp.this.stopPolling(); }
             public String getTfHost() { return tfHost.getText(); }
             public String getTfClientPort() { return tfClientPort.getText(); }
+            public int getConnectionTimeoutMs() { return (int) spinnerTimeout.getValue() * 1000; }
             public String getTfServerPort() { return tfServerPort.getText(); }
             public void setLblFileName(String text) { lblFileName.setText(text); }
             public void setStatusIndicatorConnecting() { statusIndicator.setBackground(COLOR_CONNECTING); }

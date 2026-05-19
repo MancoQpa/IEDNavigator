@@ -60,8 +60,12 @@ public class IEC61850Client implements ClientEventListener {
         this.valueChangeListener = listener;
     }
 
-    // Timeout de conexión en milisegundos
-    private static final int CONNECTION_TIMEOUT_MS = 10000;  // 10 segundos
+    // Timeout de conexión en milisegundos (configurable desde la GUI)
+    private int connectionTimeoutMs = 10000;
+
+    public void setConnectionTimeoutMs(int ms) {
+        this.connectionTimeoutMs = ms;
+    }
 
     // Executor para operaciones con timeout
     private ExecutorService connectionExecutor = Executors.newSingleThreadExecutor();
@@ -86,13 +90,13 @@ public class IEC61850Client implements ClientEventListener {
             clientSap = new ClientSap();
 
             // Configurar timeouts (importante para evitar bloqueos)
-            clientSap.setResponseTimeout(10000);  // 10 segundos
+            clientSap.setResponseTimeout(connectionTimeoutMs);
             clientSap.setMessageFragmentTimeout(5000);  // 5 segundos
 
             System.out.println("[INFO] Resolving host: " + host);
             final InetAddress address = InetAddress.getByName(host);
 
-            System.out.println("[INFO] Connecting to " + host + ":" + port + " (timeout: " + CONNECTION_TIMEOUT_MS + "ms)...");
+            System.out.println("[INFO] Connecting to " + host + ":" + port + " (timeout: " + connectionTimeoutMs + "ms)...");
 
             // Usar Future con timeout para la conexión
             Future<ClientAssociation> future = connectionExecutor.submit(() -> {
@@ -100,10 +104,10 @@ public class IEC61850Client implements ClientEventListener {
             });
 
             try {
-                association = future.get(CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                association = future.get(connectionTimeoutMs, TimeUnit.MILLISECONDS);
             } catch (TimeoutException e) {
                 future.cancel(true);
-                throw new IOException("Connection timeout after " + CONNECTION_TIMEOUT_MS + "ms");
+                throw new IOException("Connection timeout after " + connectionTimeoutMs + "ms");
             } catch (ExecutionException e) {
                 Throwable cause = e.getCause();
                 if (cause instanceof IOException) {
