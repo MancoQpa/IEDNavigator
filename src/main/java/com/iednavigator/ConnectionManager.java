@@ -1,6 +1,7 @@
 package com.iednavigator;
 
 import com.beanit.iec61850bean.FileInformation;
+import com.beanit.iec61850bean.ServerModel;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileFilter;
@@ -632,12 +633,138 @@ class ConnectionManager {
                 });
 
             } catch (Exception e) {
-                ctx.log("ERROR de conexion: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-                e.printStackTrace();
-                SwingUtilities.invokeLater(() -> {
-                    ctx.setBtnConnectEnabled(true);
-                    ctx.updateStatus(false, "Error: " + e.getMessage());
-                });
+                String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                if (errMsg.startsWith("SCL_FALLBACK:")) {
+                    // El IED rechazó retrieveModel() por DataSet inexistente, pero la asociación MMS
+                    // sigue activa. Pedimos al usuario un archivo SCL local para usarlo como modelo.
+                    ctx.log("AVISO: El IED no pudo entregar el modelo completo (DataSet inválido).");
+                    ctx.log("Cargando modelo desde archivo SCL local para continuar...");
+
+                    final String fHost = host;
+                    final int fPort = port;
+
+                    SwingUtilities.invokeLater(() -> {
+                        int choice = JOptionPane.showConfirmDialog(ctx.parentWindow(),
+                            "<html><b>El IED rechazó la descarga del modelo</b><br><br>" +
+                            "Causa: " + errMsg.substring("SCL_FALLBACK:".length()).trim() + "<br><br>" +
+                            "¿Desea cargar un archivo SCL/CID local para continuar?<br>" +
+                            "<small>(La conexión MMS sigue activa — solo se usará el SCL para navegación)</small></html>",
+                            "Fallback SCL", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+                        if (choice != JOptionPane.YES_OPTION) {
+                            ctx.getClient().cancelPendingAssociation();
+                            ctx.setBtnConnectEnabled(true);
+                            ctx.updateStatus(false, "Conexión cancelada");
+                            ctx.log("Conexión cancelada por el usuario.");
+                            return;
+                        }
+
+                        JFileChooser fc = new JFileChooser();
+                        fc.setDialogTitle("Seleccionar SCL/CID del IED");
+                        fc.setFileFilter(new javax.swing.filechooser.FileFilter() {
+                            public boolean accept(File f) {
+                                if (f.isDirectory()) return true;
+                                String n = f.getName().toLowerCase();
+                                return n.endsWith(".icd") || n.endsWith(".cid") ||
+                                       n.endsWith(".scd") || n.endsWith(".scl");
+                            }
+                            public String getDescription() { return "SCL Files (*.icd, *.cid, *.scd, *.scl)"; }
+                        });
+
+                        if (fc.showOpenDialog(ctx.parentWindow()) != JFileChooser.APPROVE_OPTION) {
+                            ctx.getClient().cancelPendingAssociation();
+                            ctx.setBtnConnectEnabled(true);
+                            ctx.updateStatus(false, "Conexión cancelada");
+                            ctx.log("Selección de SCL cancelada.");
+                            return;
+                        }
+
+                        File sclFile = fc.getSelectedFile();
+                        ctx.log("Parseando SCL: " + sclFile.getName());
+                        ctx.backgroundExecutor().submit(() -> {
+                            try {
+                                // Usar IEC61850Server para parsear y fusionar AccessPoints
+                                IEC61850Server tmpServer = new IEC61850Server();
+                                java.util.List<String> iedNames = tmpServer.getAvailableIEDs(sclFile.getAbsolutePath());
+
+                                if (iedNames.isEmpty()) {
+                                    throw new Exception("No se encontraron IEDs en el archivo SCL");
+                                }
+
+                                int iedIdx = 0;
+                                if (iedNames.size() > 1) {
+                                    final int[] sel = {-1};
+                                    SwingUtilities.invokeAndWait(() -> {
+                                        sel[0] = ctx.showIEDSelectionDialog(iedNames, sclFile.getName());
+                                    });
+                                    if (sel[0] < 0) {
+                                        ctx.getClient().cancelPendingAssociation();
+                                        SwingUtilities.invokeLater(() -> {
+                                            ctx.setBtnConnectEnabled(true);
+                                            ctx.updateStatus(false, "Conexión cancelada");
+                                        });
+                                        return;
+                                    }
+                                    iedIdx = sel[0];
+                                }
+
+                                ServerModel model = tmpServer.getMergedModel(iedIdx);
+                                if (model == null) throw new Exception("No se pudo obtener el modelo del IED " + iedIdx);
+
+                                boolean ok = ctx.getClient().attachExternalModel(model);
+                                if (!ok) throw new Exception("attachExternalModel falló");
+
+                                ctx.log("Modelo SCL inyectado: " + iedNames.get(iedIdx) + " (" + sclFile.getName() + ")");
+
+                                // Parsear GoCBs del SCL seleccionado
+                                final int fIdx = iedIdx;
+                                ctx.parseGoCBsFromScl(sclFile, fIdx);
+                                ctx.setLoadedSclFile(sclFile);
+
+                                String localIp = detectLocalInterface(fHost);
+                                final String finalLocalIp = localIp;
+
+                                SwingUtilities.invokeLater(() -> {
+                                    try {
+                                        ctx.setConnected(true);
+                                        currentHost = fHost;
+                                        currentPort = fPort;
+                                        connectedLocalIp = finalLocalIp;
+                                        ctx.setBtnConnectText("Desconectar");
+                                        ctx.setBtnConnectEnabled(true);
+                                        ctx.setCbPollingEnabled(true);
+                                        ctx.setSpinnerIntervalEnabled(true);
+                                        ctx.updateStatus(true, "Conectado (modelo SCL)");
+                                        ctx.updateConnectionInfo(fHost, fPort);
+                                        ctx.log("Construyendo árbol del modelo desde SCL...");
+                                        ctx.displayClientModel();
+                                        ctx.log("Conectado con modelo SCL. Valores individuales disponibles vía MMS.");
+                                        ctx.autoSelectGooseInterface(finalLocalIp);
+                                        ctx.refreshGooseControlBlocks();
+                                    } catch (Exception uiEx) {
+                                        ctx.log("ERROR en UI (SCL fallback): " + uiEx.getMessage());
+                                    }
+                                });
+                            } catch (Exception ex) {
+                                ctx.getClient().cancelPendingAssociation();
+                                ctx.log("ERROR en fallback SCL: " + ex.getMessage());
+                                ex.printStackTrace();
+                                SwingUtilities.invokeLater(() -> {
+                                    ctx.setBtnConnectEnabled(true);
+                                    ctx.updateStatus(false, "Error: " + ex.getMessage());
+                                });
+                            }
+                        });
+                    });
+
+                } else {
+                    ctx.log("ERROR de conexion: " + e.getClass().getSimpleName() + " - " + errMsg);
+                    e.printStackTrace();
+                    SwingUtilities.invokeLater(() -> {
+                        ctx.setBtnConnectEnabled(true);
+                        ctx.updateStatus(false, "Error: " + errMsg);
+                    });
+                }
             }
         });
     }

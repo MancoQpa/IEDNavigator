@@ -424,6 +424,17 @@ public class IEC61850Server implements ServerEventListener {
     }
 
     /**
+     * Retorna el ServerModel fusionado para el IED en el índice dado.
+     * Debe llamarse después de getAvailableIEDs() para que mergedModels esté poblado.
+     */
+    public ServerModel getMergedModel(int index) {
+        if (mergedModels != null && index >= 0 && index < mergedModels.size()) {
+            return mergedModels.get(index);
+        }
+        return null;
+    }
+
+    /**
      * Carga el modelo desde un InputStream
      */
     public boolean loadSclStream(InputStream inputStream) {

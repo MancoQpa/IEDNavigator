@@ -63,6 +63,9 @@ public class IEC61850Client implements ClientEventListener {
     // Timeout de conexión en milisegundos (configurable desde la GUI)
     private int connectionTimeoutMs = 10000;
 
+    // Asociación conservada cuando retrieveModel() falla con DataSet error (fallback SCL)
+    private ClientAssociation pendingAssociation = null;
+
     public void setConnectionTimeoutMs(int ms) {
         this.connectionTimeoutMs = ms;
     }
@@ -133,21 +136,22 @@ public class IEC61850Client implements ClientEventListener {
                 System.err.println("[ERROR] ServiceError during model retrieval:");
                 System.err.println("  Error code: " + serviceEx.getErrorCode());
                 System.err.println("  Message: " + serviceEx.getMessage());
-                System.err.println("  Description: " + serviceEx.toString());
                 serviceEx.printStackTrace();
-                if (serviceEx.getMessage() != null && serviceEx.getMessage().contains("DataSet")) {
-                    System.err.println("[INFO] This error typically occurs when:");
-                    System.err.println("  1. The server's SCL file has DataSets referencing non-existent data");
-                    System.err.println("  2. The DataSet's FCDA members have invalid references");
-                    System.err.println("  3. There's a mismatch between DataSet definitions and actual model");
-                    System.err.println("[HINT] Try using a simpler CID file or check your SCL for errors");
+                String msg = serviceEx.getMessage() != null ? serviceEx.getMessage() : "";
+                // Si el error es por DataSet inexistente, conservar la asociación para fallback SCL
+                if (msg.contains("DataSet") || msg.contains("PARAMETER_VALUE_INAPPROPRIATE")) {
+                    System.err.println("[INFO] DataSet reference error - keeping association alive for SCL fallback");
+                    pendingAssociation = association;
+                    association = null;
+                    connected = false;
+                    throw new IOException("SCL_FALLBACK: " + serviceEx.getErrorCode() + " - " + msg, serviceEx);
                 }
                 connected = false;
                 if (association != null) {
                     try { association.close(); } catch (Exception ex) {}
                     association = null;
                 }
-                throw new IOException("ServiceError: " + serviceEx.getErrorCode() + " - " + serviceEx.getMessage(), serviceEx);
+                throw new IOException("ServiceError: " + serviceEx.getErrorCode() + " - " + msg, serviceEx);
             } catch (Exception modelEx) {
                 System.err.println("[ERROR] Model retrieval failed: " + modelEx.getClass().getName());
                 System.err.println("  Message: " + modelEx.getMessage());
@@ -176,6 +180,34 @@ public class IEC61850Client implements ClientEventListener {
                 association = null;
             }
             throw new IOException("Connection error: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Inyecta un ServerModel parseado localmente (fallback SCL).
+     * La asociación MMS que quedó en pendingAssociation se activa como conexión normal.
+     * Permite leer/escribir valores individuales aunque retrieveModel() haya fallado.
+     */
+    public boolean attachExternalModel(ServerModel model) {
+        if (pendingAssociation == null) {
+            System.err.println("[ERROR] attachExternalModel: no hay pendingAssociation");
+            return false;
+        }
+        association = pendingAssociation;
+        pendingAssociation = null;
+        serverModel = model;
+        connected = true;
+        System.out.println("[INFO] SCL fallback: modelo externo inyectado (" + countNodes(model) + " nodos)");
+        return true;
+    }
+
+    /**
+     * Cierra y descarta la asociación pendiente (cuando el usuario cancela el fallback).
+     */
+    public void cancelPendingAssociation() {
+        if (pendingAssociation != null) {
+            try { pendingAssociation.close(); } catch (Exception ex) {}
+            pendingAssociation = null;
         }
     }
 
