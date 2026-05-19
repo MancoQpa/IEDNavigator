@@ -1,8 +1,15 @@
+# build_zip_installer_v33.ps1 — Empaqueta IEDNavigator para distribución Windows
+#
+# Uso:
+#   .\build_zip_installer_v33.ps1                  # versión 3.4 (default)
+#   .\build_zip_installer_v33.ps1 -Version 3.5
+
+param([string]$Version = "3.4")
+
 $ErrorActionPreference = "Stop"
-$ProjectRoot = 'C:\Users\admin\Documents\proyectos IA\iec61850_java_explorer'
-$Version     = "3.3"
+$ProjectRoot = $PSScriptRoot
 $OutputName  = "IEDNavigator_v${Version}_Setup"
-$TempDir     = "$ProjectRoot\temp_installer_v33"
+$TempDir     = "$ProjectRoot\temp_installer_build"
 $AppDir      = "$TempDir\IEDNavigator"
 $OutputDir   = "$ProjectRoot\installer\output"
 $OutputZip   = "$OutputDir\${OutputName}.zip"
