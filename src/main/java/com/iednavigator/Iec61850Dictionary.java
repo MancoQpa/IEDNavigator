@@ -1166,10 +1166,18 @@ class Iec61850Dictionary {
     static void showInfoDialog(Component parent, String nodeName) {
         Entry entry = lookup(nodeName);
 
+        // Detectar si el match fue por inferencia parcial
+        // (el nombre sin dígitos no coincide directamente con la clase inferida)
+        String inferredClass = inferLnClass(nodeName);
+        String stripped = nodeName.replaceAll("\\d+$", "").toUpperCase();
+        boolean isInferred = entry != null
+                && inferredClass != null
+                && !stripped.equals(inferredClass);
+
         JDialog dialog = new JDialog(
             (Frame) SwingUtilities.getWindowAncestor(parent),
             "IEC 61850 — Descripción del Elemento", true);
-        dialog.setSize(600, 460);
+        dialog.setSize(600, 480);
         dialog.setLocationRelativeTo(parent);
         dialog.setResizable(true);
 
@@ -1207,7 +1215,9 @@ class Iec61850Dictionary {
         header.add(nameLabel, BorderLayout.CENTER);
 
         if (entry != null) {
-            JLabel typeLabel = new JLabel(entry.type.label);
+            String typeText = entry.type.label
+                + (isInferred ? "  ·  inferido como " + inferredClass : "");
+            JLabel typeLabel = new JLabel(typeText);
             typeLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
             typeLabel.setForeground(new Color(255, 255, 255, 200));
             header.add(typeLabel, BorderLayout.SOUTH);
@@ -1229,6 +1239,25 @@ class Iec61850Dictionary {
                 "Consulte el manual técnico del equipo o el archivo SCL/CID " +
                 "para más detalles.</html>", new Color(0x546E7A)));
         } else {
+            // Aviso de inferencia parcial (nombre no estándar de fabricante)
+            if (isInferred) {
+                JPanel inferBanner = new JPanel(new BorderLayout(8, 0));
+                inferBanner.setBackground(new Color(0xFFF8E1));
+                inferBanner.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(0, 4, 0, 0, new Color(0xFFB300)),
+                    new EmptyBorder(7, 10, 7, 10)));
+                inferBanner.setAlignmentX(Component.LEFT_ALIGNMENT);
+                inferBanner.setMaximumSize(new Dimension(Integer.MAX_VALUE, 46));
+                JLabel inferLbl = new JLabel(
+                    "<html><b>" + nodeName + "</b> es un nombre de fabricante. "
+                    + "Clase IEC 61850 inferida por coincidencia parcial: "
+                    + "<b>" + inferredClass + "</b></html>");
+                inferLbl.setFont(new Font("SansSerif", Font.PLAIN, 12));
+                inferLbl.setForeground(new Color(0x5D4037));
+                inferBanner.add(inferLbl, BorderLayout.CENTER);
+                body.add(inferBanner);
+                body.add(Box.createVerticalStrut(10));
+            }
             // Nombres
             JPanel namesPanel = new JPanel(new GridLayout(1, 2, 10, 0));
             namesPanel.setOpaque(false);
