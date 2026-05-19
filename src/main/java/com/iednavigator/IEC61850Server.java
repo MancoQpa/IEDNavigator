@@ -123,6 +123,11 @@ public class IEC61850Server implements ServerEventListener {
     /**
      * Fusiona los LDs y DataSets de varios AccessPoints consecutivos en un único ServerModel.
      * fromIdx es inclusivo, toIdx es exclusivo.
+     *
+     * Después de fusionar, re-resuelve el campo package-private Rcb.dataSet para todos los RCBs
+     * del modelo fusionado. SclParser solo resuelve referencias dentro del mismo AccessPoint;
+     * referencias cruzadas entre APs quedan en null, lo que causa que iec61850bean responda
+     * PARAMETER_VALUE_INAPPROPRIATE cuando un cliente llama retrieveModel().
      */
     private ServerModel mergeModels(List<ServerModel> models, int fromIdx, int toIdx) {
         List<LogicalDevice> allLDs = new ArrayList<>();
@@ -139,7 +144,132 @@ public class IEC61850Server implements ServerEventListener {
             if (ds != null) allDataSets.addAll(ds);
         }
 
-        return new ServerModel(allLDs, allDataSets);
+        ServerModel merged = new ServerModel(allLDs, allDataSets);
+        relinkRcbDataSets(merged);
+        return merged;
+    }
+
+    /**
+     * Re-resuelve el campo Rcb.dataSet (package-private en iec61850bean) para todos los RCBs
+     * del modelo fusionado, usando reflexión.
+     *
+     * Cuando SclParser construye modelos por AccessPoint separados, los RCBs que referencian
+     * DataSets de otro AccessPoint quedan con dataSet=null. Tras fusionar, el DataSet existe
+     * en el modelo pero el campo no fue actualizado. Este método lo corrige.
+     *
+     * Para cualquier RCB cuyo datSet no pueda resolverse (ni por referencia exacta ni por
+     * coincidencia de sufijo), limpia el valor del atributo para que el cliente no solicite
+     * un DataSet inexistente.
+     */
+    private void relinkRcbDataSets(ServerModel model) {
+        // Índice de DataSets: referencia completa → objeto
+        Map<String, DataSet> dsIndex = new HashMap<>();
+        Collection<DataSet> allDs = model.getDataSets();
+        if (allDs != null) {
+            for (DataSet ds : allDs) {
+                dsIndex.put(ds.getReferenceStr(), ds);
+                // También indexar con '$' en lugar de '.' (formato alternativo que usa iec61850bean)
+                String altRef = ds.getReferenceStr().replaceAll("\\.(?=[^./]+$)", "\\$");
+                dsIndex.put(altRef, ds);
+            }
+        }
+
+        // Obtener el campo Rcb.dataSet por reflexión (package-private)
+        java.lang.reflect.Field dataSetField = null;
+        try {
+            Class<?> rcbClass = Class.forName("com.beanit.iec61850bean.Rcb");
+            dataSetField = rcbClass.getDeclaredField("dataSet");
+            dataSetField.setAccessible(true);
+        } catch (Exception e) {
+            System.err.println("[SERVER] No se pudo acceder a Rcb.dataSet por reflexión: " + e.getMessage());
+        }
+
+        int linked = 0, cleared = 0;
+
+        for (ModelNode ldNode : model.getChildren()) {
+            if (!(ldNode instanceof LogicalDevice)) continue;
+            for (ModelNode lnNode : ldNode.getChildren()) {
+                if (!(lnNode instanceof LogicalNode)) continue;
+                LogicalNode ln = (LogicalNode) lnNode;
+
+                Collection<Urcb> urcbs = ln.getUrcbs();
+                if (urcbs != null) {
+                    for (Urcb urcb : urcbs) {
+                        if (processRcbDataSet(urcb, dsIndex, dataSetField, model)) linked++;
+                        else cleared++;
+                    }
+                }
+                Collection<Brcb> brcbs = ln.getBrcbs();
+                if (brcbs != null) {
+                    for (Brcb brcb : brcbs) {
+                        if (processRcbDataSet(brcb, dsIndex, dataSetField, model)) linked++;
+                        else cleared++;
+                    }
+                }
+            }
+        }
+
+        if (linked > 0 || cleared > 0) {
+            System.out.println("[SERVER] RCB re-link: " + linked + " enlazados, " + cleared + " sin DataSet válido (limpiados)");
+        }
+    }
+
+    /**
+     * Intenta resolver el DataSet de un RCB en el modelo fusionado.
+     * Si lo encuentra, actualiza Rcb.dataSet via reflexión.
+     * Si no, limpia el atributo datSet para que el cliente no lo solicite.
+     * @return true si se resolvió correctamente, false si se limpió
+     */
+    private boolean processRcbDataSet(Rcb rcb, Map<String, DataSet> dsIndex,
+                                       java.lang.reflect.Field dataSetField, ServerModel model) {
+        BdaVisibleString datSetAttr = rcb.getDatSet();
+        if (datSetAttr == null) return true;
+
+        String datSetVal = datSetAttr.getStringValue();
+        if (datSetVal == null || datSetVal.isEmpty()) return true;
+
+        // Buscar por referencia exacta y variantes
+        DataSet found = dsIndex.get(datSetVal);
+        if (found == null) {
+            // Intentar reemplazando '$' por '.' (o viceversa) en el último separador
+            String alt = datSetVal.contains("$")
+                ? datSetVal.replaceAll("\\$(?=[^$]+$)", ".")
+                : datSetVal.replaceAll("\\.(?=[^./]+$)", "\\$");
+            found = dsIndex.get(alt);
+        }
+        if (found == null) {
+            // Búsqueda por sufijo (el datSet puede ser relativo sin prefijo IED)
+            String normalized = datSetVal.replace('$', '.');
+            for (Map.Entry<String, DataSet> entry : dsIndex.entrySet()) {
+                if (entry.getKey().endsWith("/" + normalized) || entry.getKey().endsWith("." + normalized)) {
+                    found = entry.getValue();
+                    break;
+                }
+            }
+        }
+
+        if (found != null) {
+            // Actualizar el campo Rcb.dataSet via reflexión si es que era null
+            if (dataSetField != null) {
+                try {
+                    Object current = dataSetField.get(rcb);
+                    if (current == null) {
+                        dataSetField.set(rcb, found);
+                    }
+                } catch (Exception e) {
+                    // Si la reflexión falla, al menos el datSet string está correcto
+                }
+            }
+            return true;
+        }
+
+        // No se encontró el DataSet — limpiar para evitar error en retrieveModel()
+        System.out.println("[SERVER] datSet '" + datSetVal + "' no encontrado en modelo — limpiando RCB " + rcb.getName());
+        datSetAttr.setValue("");
+        if (dataSetField != null) {
+            try { dataSetField.set(rcb, null); } catch (Exception ignored) {}
+        }
+        return false;
     }
 
     /**
