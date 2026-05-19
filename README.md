@@ -1,4 +1,4 @@
-# IEDNavigator v3.0-edu
+# IEDNavigator v3.3
 
 Herramienta de escritorio Java para exploracion y simulacion del protocolo **IEC 61850**.
 Funcionalmente similar a cualquier herramienta de exploración de ieds. De uso libre bajo licencia GPL v3.
@@ -16,7 +16,8 @@ Desarrollado por **Emilio Medina**.
 - Polling periodico configurable
 - Activity Monitor con filtros y exportacion CSV
 - Suscripcion a reportes (URCB/BRCB)
-- Control de interruptores y seccionadores (SBO / directo)
+- Control de interruptores y seccionadores: directo, SBO y SBOw (Select-Before-Operate)
+- Cancel SELECT, flag Test, campos Check (synchroChk / interlkChk), identificador orIdent
 - Bloqueo FC=BL (blkEna) y Setting Groups (SGCB)
 
 ### Modo Servidor
@@ -24,6 +25,7 @@ Desarrollado por **Emilio Medina**.
 - Responde a lecturas MMS de clientes externos
 - Edicion interactiva de valores desde la GUI
 - Enumeraciones (EnumType) leidas desde el SCL
+- Compatibilidad con archivos SCD/CID de Siemens SIPROTEC5 (EnumTypes incompletos corregidos)
 
 ### GOOSE (IEC 61850-8-1)
 - Publicacion y suscripcion Layer 2 (pcap4j)
@@ -102,18 +104,15 @@ Sin esta DLL todas las demas funciones funcionan con normalidad.
 
 ## Estructura del proyecto
 
-    src/main/java/com/iedexplorer/
-    IEDExplorerApp.java        <- GUI principal
+    src/main/java/com/iednavigator/
+    IEDNavigatorApp.java       <- GUI principal
     IEC61850Client.java        <- Cliente MMS
     IEC61850Server.java        <- Servidor IED desde SCL
-    GoosePanel.java            <- Panel GOOSE completo
+    GoosePublisher.java        <- Publicacion GOOSE
+    GooseSubscriber.java       <- Suscripcion GOOSE
+    GooseUdpBridge.java        <- Bridge GOOSE sobre UDP
     ConnectionManager.java     <- Gestion de conexion
-    PollingManager.java        <- Polling periodico
-    MonitorManager.java        <- Activity Monitor
-    ModelTreeBuilder.java      <- Arbol de modelo
-    SclFileProcessor.java      <- Parser SCL
-    ReportsPanel.java          <- Reportes RCB
-    [+ 21 clases auxiliares]
+    [+ clases auxiliares]
     native_lib/                <- Bindings JNA a iec61850.dll
 
     lib/                       <- Dependencias Java preempaquetadas
@@ -160,5 +159,4 @@ Copyright (C) 2024 Emilio Medina
 ## Problemas conocidos
 
 - GOOSE Layer 2 puede no funcionar en todas las interfaces de red en Windows
-- El timeout de conexion MMS es de 10 segundos (no configurable en esta version)
-- Sampled Values (SMV) esta desactivado en esta version (SIN SMV)
+- Sampled Values (SMV) no tiene panel GUI en esta version
