@@ -1,4 +1,4 @@
-# IEDNavigator v3.3
+# IEDNavigator v3.4
 
 Herramienta de escritorio Java para exploracion y simulacion del protocolo **IEC 61850**.
 Funcionalmente similar a cualquier herramienta de exploración de ieds. De uso libre bajo licencia GPL v3.
@@ -26,6 +26,12 @@ Desarrollado por **Emilio Medina**.
 - Edicion interactiva de valores desde la GUI
 - Enumeraciones (EnumType) leidas desde el SCL
 - Compatibilidad con archivos SCD/CID de Siemens SIPROTEC5 (EnumTypes incompletos corregidos)
+
+### Diccionario IEC 61850
+- Descripcion educativa de nodos logicos (LN), CDCs, FCs, DOs y DAs
+- Inferencia de nombres de fabricante: detecta la clase IEC 61850 por coincidencia parcial de sufijo (p. ej. ABB VNMMXU1 → MMXU, SCILO1 → CILO, DPGGIO9 → GGIO)
+- Aviso explicito cuando el match es inferido, con la clase estandar identificada
+- Timeout de conexion configurable en panel Cliente (5–60 s)
 
 ### GOOSE (IEC 61850-8-1)
 - Publicacion y suscripcion Layer 2 (pcap4j)
