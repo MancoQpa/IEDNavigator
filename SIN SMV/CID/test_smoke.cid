@@ -10,6 +10,10 @@
       <DataSetDirectory />
       <ReadWrite />
       <GetCBValues />
+      <UnbufferedReporting />
+      <BufferedReporting />
+      <ReportSettings cbName="Dyn" datSet="Dyn" rptID="Dyn" optFields="Dyn"
+          bufTime="Dyn" trgOps="Dyn" intgPd="Dyn" />
     </Services>
     <AccessPoint name="AP1">
       <Server>

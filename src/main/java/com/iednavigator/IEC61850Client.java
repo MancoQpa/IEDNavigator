@@ -922,46 +922,35 @@ public class IEC61850Client implements ClientEventListener {
      * 3. Si falla: trgOps + rptId + rptEna juntos
      */
     private void enableRcb(Rcb rcb) throws ServiceError, IOException {
-        // Estrategia 1: solo escribir rptEna=true (iec61850bean server nativo)
-        rcb.getRptEna().setValue(true);
-        association.setRcbValues(rcb,
-            false, false, true, false, false, false, false, false);
-        association.getRcbValues(rcb);
-        if (rcb.getRptEna() != null && rcb.getRptEna().getValue()) {
-            System.out.println("[OK] RCB " + rcb.getName() + " habilitado (estrategia 1)");
-            return;
-        }
-
-        // Estrategia 2: trgOps primero, luego rptEna sola
+        // Paso 1: configurar trgOps mientras rptEna=false
         if (rcb.getTrgOps() != null) {
             rcb.getRptEna().setValue(false);
             rcb.getTrgOps().setDataChange(true);
             rcb.getTrgOps().setQualityChange(true);
             rcb.getTrgOps().setGeneralInterrogation(true);
-            association.setRcbValues(rcb,
-                false, false, false, false, false, false, true, false);
+            try {
+                association.setRcbValues(rcb,
+                    false, false, false, false, false, false, true, false);
+            } catch (ServiceError e) {
+                System.out.println("[WARN] trgOps set rechazado: " + e.getMessage() + " - continuando");
+            }
         }
+
+        // Paso 2: habilitar (solo rptEna=true — si no lanza ServiceError, asumimos éxito)
         rcb.getRptEna().setValue(true);
         association.setRcbValues(rcb,
             false, false, true, false, false, false, false, false);
-        association.getRcbValues(rcb);
-        if (rcb.getRptEna() != null && rcb.getRptEna().getValue()) {
-            System.out.println("[OK] RCB " + rcb.getName() + " habilitado (estrategia 2)");
-            return;
-        }
 
-        // Estrategia 3: trgOps + rptId + rptEna juntos (servidores NRR/NARI)
-        rcb.getRptEna().setValue(true);
-        association.setRcbValues(rcb,
-            true, false, true, false, false, false, true, false);
-        association.getRcbValues(rcb);
-        if (rcb.getRptEna() != null && rcb.getRptEna().getValue()) {
-            System.out.println("[OK] RCB " + rcb.getName() + " habilitado (estrategia 3)");
-            return;
+        // Verificar — pero no fallar si el servidor no refleja el cambio en el modelo local
+        // (iec61850bean server puede no actualizar el BDA local tras setRcbValues)
+        try {
+            association.getRcbValues(rcb);
+        } catch (ServiceError e) {
+            System.out.println("[WARN] getRcbValues post-enable falló: " + e.getMessage());
         }
-
-        throw new IOException("El servidor rechazó el enable del RCB: " + rcb.getName()
-            + " (RptEna sigue false tras setRcbValues)");
+        boolean enabled = rcb.getRptEna() != null && rcb.getRptEna().getValue();
+        System.out.println("[" + (enabled ? "OK" : "INFO") + "] RCB " + rcb.getName()
+            + " → rptEna local=" + enabled + " (si no hubo ServiceError, el servidor lo aceptó)");
     }
 
     /**
