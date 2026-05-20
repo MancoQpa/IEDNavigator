@@ -931,7 +931,7 @@ public class IEC61850Client implements ClientEventListener {
             try {
                 association.setRcbValues(rcb,
                     false, false, false, false, false, false, true, false);
-            } catch (ServiceError e) {
+            } catch (Exception e) {
                 System.out.println("[WARN] trgOps set rechazado: " + e.getMessage() + " - continuando");
             }
         }
