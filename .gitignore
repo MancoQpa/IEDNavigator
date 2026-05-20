@@ -78,6 +78,15 @@ android_ied_simulator - que mejor salio v3.02/
 IEDNavigator_v*/
 IEDNavigator.jar
 IEDNavigator_new.jar
+# Excepciones: distribución instalador (clases compiladas para la otra PC)
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/IEDNavigator.bat
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/README.txt
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/INSTALAR.bat
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/classes/
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/classes/**
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/lib/
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/lib/**
 
 # HarmonicMonitor (repo separado)
 HarmonicMonitor/
