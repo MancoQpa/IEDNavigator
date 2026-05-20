@@ -133,25 +133,29 @@ public class IEC61850Client implements ClientEventListener {
                 serverModel = association.retrieveModel();
                 System.out.println("[INFO] Model retrieved successfully - " + countNodes(serverModel) + " nodes");
             } catch (ServiceError serviceEx) {
-                System.err.println("[ERROR] ServiceError during model retrieval:");
+                System.err.println("[WARN] ServiceError during model retrieval:");
                 System.err.println("  Error code: " + serviceEx.getErrorCode());
                 System.err.println("  Message: " + serviceEx.getMessage());
-                serviceEx.printStackTrace();
                 String msg = serviceEx.getMessage() != null ? serviceEx.getMessage() : "";
-                // Si el error es por DataSet inexistente, conservar la asociación para fallback SCL
-                if (msg.contains("DataSet") || msg.contains("PARAMETER_VALUE_INAPPROPRIATE")) {
-                    System.err.println("[INFO] DataSet reference error - keeping association alive for SCL fallback");
+                // Si el error es por DataSet inexistente, intentar extraer el modelo parcial ya
+                // construido por retrieveModel() antes de que updateDataSets() fallara.
+                // ClientAssociation.serverModel ya tiene la estructura completa del IED.
+                ServerModel partialModel = extractPartialModelFromAssociation(association);
+                if (partialModel != null && partialModel.getChildren() != null
+                        && !partialModel.getChildren().isEmpty()) {
+                    serverModel = partialModel;
+                    connected = true;
+                    System.out.println("[INFO] Modelo parcial recuperado via reflexión ("
+                        + countNodes(serverModel) + " nodos). DataSets omitidos.");
+                    // No lanzar excepción — continuar con modelo parcial
+                } else {
+                    // No se pudo extraer modelo parcial → guardar asociación para fallback SCL
+                    System.err.println("[INFO] No se pudo recuperar modelo parcial - conservando asociación para fallback SCL");
                     pendingAssociation = association;
                     association = null;
                     connected = false;
                     throw new IOException("SCL_FALLBACK: " + serviceEx.getErrorCode() + " - " + msg, serviceEx);
                 }
-                connected = false;
-                if (association != null) {
-                    try { association.close(); } catch (Exception ex) {}
-                    association = null;
-                }
-                throw new IOException("ServiceError: " + serviceEx.getErrorCode() + " - " + msg, serviceEx);
             } catch (Exception modelEx) {
                 System.err.println("[ERROR] Model retrieval failed: " + modelEx.getClass().getName());
                 System.err.println("  Message: " + modelEx.getMessage());
@@ -209,6 +213,26 @@ public class IEC61850Client implements ClientEventListener {
             try { pendingAssociation.close(); } catch (Exception ex) {}
             pendingAssociation = null;
         }
+    }
+
+    /**
+     * Extrae el ServerModel parcial ya construido dentro de ClientAssociation via reflexión.
+     * retrieveModel() en iec61850bean construye serverModel antes de llamar a updateDataSets(),
+     * por lo que el campo ya tiene la estructura completa del IED cuando updateDataSets() falla.
+     */
+    private ServerModel extractPartialModelFromAssociation(ClientAssociation assoc) {
+        if (assoc == null) return null;
+        try {
+            java.lang.reflect.Field smField = assoc.getClass().getDeclaredField("serverModel");
+            smField.setAccessible(true);
+            Object sm = smField.get(assoc);
+            if (sm instanceof ServerModel) {
+                return (ServerModel) sm;
+            }
+        } catch (Exception e) {
+            System.err.println("[INFO] extractPartialModel via reflexión falló: " + e.getMessage());
+        }
+        return null;
     }
 
     /**
@@ -318,6 +342,31 @@ public class IEC61850Client implements ClientEventListener {
             }
             throw new IOException(error, e);
         }
+    }
+
+    /**
+     * Extrae el nombre del IED desde el modelo de servidor.
+     * En MMS, los dominios (LD) se nombran IEDName+LDInst. El prefijo común de todos
+     * los LDs es el nombre del IED. Si hay un solo LD se devuelve su nombre completo.
+     */
+    public String getIedName() {
+        if (serverModel == null || serverModel.getChildren() == null
+                || serverModel.getChildren().isEmpty()) return "";
+        List<String> ldNames = new ArrayList<>();
+        for (ModelNode ld : serverModel.getChildren()) {
+            ldNames.add(ld.getName());
+        }
+        if (ldNames.size() == 1) return ldNames.get(0);
+        // Calcular prefijo común
+        String prefix = ldNames.get(0);
+        for (int i = 1; i < ldNames.size(); i++) {
+            String s = ldNames.get(i);
+            int len = Math.min(prefix.length(), s.length());
+            int j = 0;
+            while (j < len && prefix.charAt(j) == s.charAt(j)) j++;
+            prefix = prefix.substring(0, j);
+        }
+        return prefix.isEmpty() ? ldNames.get(0) : prefix;
     }
 
     /**

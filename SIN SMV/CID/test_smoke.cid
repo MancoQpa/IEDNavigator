@@ -16,11 +16,34 @@
         <Authentication />
         <LDevice inst="LD0">
           <LN0 lnClass="LLN0" lnType="LLN0Type" inst="">
-            <!-- Simple DataSet with valid references -->
+            <!-- DataSet con 3 valores monitoreables -->
             <DataSet name="TestDS">
               <FCDA ldInst="LD0" lnClass="LLN0" fc="ST" doName="Mod" daName="stVal" />
               <FCDA ldInst="LD0" lnClass="LPHD" lnInst="1" fc="ST" doName="PhyHealth" daName="stVal" />
+              <FCDA ldInst="LD0" lnClass="GGIO" lnInst="1" fc="ST" doName="Ind1" daName="stVal" />
             </DataSet>
+            <!-- URCB: Unbuffered Report Control Block -->
+            <ReportControl name="urcb01" confRev="1" datSet="TestDS"
+                rptID="TestIED/LD0/LLN0.urcb01" buffered="false" intgPd="10000">
+              <TrgOps dchg="true" qchg="true" dupd="false" period="true" gi="true"/>
+              <OptFields seqNum="true" timeStamp="true" dataSet="true" reasonCode="true"
+                  dataRef="true" entryID="false" configRef="false"/>
+              <RptEnabled max="1"/>
+            </ReportControl>
+            <!-- BRCB: Buffered Report Control Block -->
+            <ReportControl name="brcb01" confRev="1" datSet="TestDS"
+                rptID="TestIED/LD0/LLN0.brcb01" buffered="true" intgPd="10000" bufTime="0">
+              <TrgOps dchg="true" qchg="true" dupd="false" period="true" gi="true"/>
+              <OptFields seqNum="true" timeStamp="true" dataSet="true" reasonCode="true"
+                  dataRef="true" entryID="true" configRef="false"/>
+              <RptEnabled max="1"/>
+            </ReportControl>
+            <DOI name="NamPlt">
+              <DAI name="vendor"><Val>IEDNavigator</Val></DAI>
+              <DAI name="swRev"><Val>3.4</Val></DAI>
+              <DAI name="d"><Val>Test IED</Val></DAI>
+              <DAI name="configRev"><Val>v1.0-test</Val></DAI>
+            </DOI>
             <DOI name="Mod">
               <DAI name="ctlModel"><Val>status-only</Val></DAI>
             </DOI>
@@ -85,6 +108,7 @@
       <DA name="vendor" bType="VisString255" fc="DC"/>
       <DA name="swRev" bType="VisString255" fc="DC"/>
       <DA name="d" bType="VisString255" fc="DC"/>
+      <DA name="configRev" bType="VisString255" fc="DC"/>
     </DOType>
     <DOType id="DPLType" cdc="DPL">
       <DA name="vendor" bType="VisString255" fc="DC"/>

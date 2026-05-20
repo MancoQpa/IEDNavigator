@@ -618,6 +618,44 @@ public class IEC61850Server implements ServerEventListener {
     }
 
     /**
+     * Inyecta los atributos de la placa del IED (del XML del SCL) en los nodos FC=DC del modelo
+     * servido, para que clientes que lean LLN0.NamPlt via MMS obtengan los datos reales.
+     * Se llama tras cargar el SCL y antes de iniciar el servidor.
+     *
+     * @param vendor    atributo manufacturer del elemento IED
+     * @param type      atributo type del elemento IED
+     * @param configRev atributo configVersion del elemento IED
+     */
+    public void injectNameplate(String vendor, String type, String configRev) {
+        if (serverModel == null || serverModel.getChildren() == null) return;
+        // Recorrer todos los LDs buscando LLN0 → NamPlt → vendor/d/configRev
+        for (ModelNode ld : serverModel.getChildren()) {
+            if (ld.getChildren() == null) continue;
+            for (ModelNode ln : ld.getChildren()) {
+                if (!"LLN0".equals(ln.getName())) continue;
+                if (ln.getChildren() == null) continue;
+                for (ModelNode doNode : ln.getChildren()) {
+                    if (!"NamPlt".equals(doNode.getName())) continue;
+                    if (doNode.getChildren() == null) continue;
+                    for (ModelNode da : doNode.getChildren()) {
+                        if (!(da instanceof BdaVisibleString)) continue;
+                        BdaVisibleString bda = (BdaVisibleString) da;
+                        String n = da.getName();
+                        String val = null;
+                        if ("vendor".equals(n))    val = vendor;
+                        else if ("d".equals(n))    val = type;
+                        else if ("configRev".equals(n) && configRev != null && !configRev.isEmpty()) val = configRev;
+                        if (val != null && !val.isEmpty()) {
+                            bda.setValue(val.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                            System.out.println("[Nameplate] " + ld.getName() + "/LLN0.NamPlt." + n + " = " + val);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Inicia el servidor (igual que la APK)
      */
     public boolean start(int port) {

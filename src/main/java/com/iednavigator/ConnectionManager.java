@@ -470,6 +470,9 @@ class ConnectionManager {
                                         iedName, mfr, type, cfgV);
                                     ctx.setLblIedInfo(plate);
                                     ctx.log("Nameplate: fabricante=" + mfr + " tipo=" + type + cfgV.trim());
+                                    // Inyectar nameplate en los nodos FC=DC del modelo servido
+                                    // para que clientes que lean via MMS obtengan los datos reales
+                                    ctx.getServer().injectNameplate(np[0], np[1], np[3]);
                                 }
                                 ctx.log("Construyendo arbol...");
                                 ctx.displayServerModel();
@@ -609,16 +612,27 @@ class ConnectionManager {
                         // Leer placa de identificación del IED (FC=DC) en background
                         ctx.backgroundExecutor().submit(() -> {
                             Map<String, String> plate = ctx.getClient().readDeviceNameplate();
-                            if (!plate.isEmpty()) {
-                                String info = String.format("  IED: %s  |  FW: %s  |  Config: %s",
-                                    plate.getOrDefault("vendor",    "?"),
-                                    plate.getOrDefault("swRev",     "?"),
-                                    plate.getOrDefault("configRev", "?"));
-                                SwingUtilities.invokeLater(() -> {
-                                    ctx.setLblIedInfo(info);
-                                    ctx.log("Placa IED →" + info.trim());
-                                });
-                            }
+                            // IED name: usar vendor si es un nombre de fabricante,
+                            // sino extraer del prefijo común de LDs del modelo
+                            String iedName = ctx.getClient().getIedName();
+                            if (iedName.isEmpty()) iedName = finalHost;
+                            // Fabricante: vendor del LLN0.NamPlt
+                            String mfr = plate.getOrDefault("vendor", "");
+                            // Tipo: campo d (descripción) o swRev como fallback
+                            String tipo = plate.getOrDefault("d", "");
+                            if (tipo.isEmpty()) tipo = plate.getOrDefault("swRev", "");
+                            // Config: configRev
+                            String cfgV = plate.getOrDefault("configRev", "");
+                            // Formato idéntico al modo Servidor para que updateIedDisplay parsee igual
+                            StringBuilder sb = new StringBuilder("  IED: ").append(iedName);
+                            if (!mfr.isEmpty())  sb.append("  |  Fabricante: ").append(mfr);
+                            if (!tipo.isEmpty()) sb.append("  |  Tipo: ").append(tipo);
+                            if (!cfgV.isEmpty()) sb.append("  cfg:").append(cfgV);
+                            final String finalInfo = sb.toString();
+                            SwingUtilities.invokeLater(() -> {
+                                ctx.setLblIedInfo(finalInfo);
+                                ctx.log("Placa IED →" + finalInfo.trim());
+                            });
                         });
 
                         // Auto-seleccionar interfaz de red para GOOSE

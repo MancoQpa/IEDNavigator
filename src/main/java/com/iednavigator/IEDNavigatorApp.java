@@ -2383,15 +2383,18 @@ public class IEDNavigatorApp extends JFrame {
             return;
         }
 
-        // Extraer nombre del IED (primer campo tras "IED:")
+        // Extraer nombre del IED (primer campo tras "IED:", termina en "|" o "cfg:" o fin)
         String iedName = "";
         if (infoText.contains("IED:")) {
             int s = infoText.indexOf("IED:") + 4;
             int e = infoText.indexOf("|", s);
+            int eCfg = infoText.indexOf("cfg:", s);
+            if (e < 0) e = eCfg;
+            else if (eCfg >= 0) e = Math.min(e, eCfg);
             iedName = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
         }
 
-        // Extraer subtitulo: Tipo o Config
+        // Extraer subtitulo: solo Tipo (modelo del equipo). cfg y Config NO van al cuadro.
         String sub = "";
         if (infoText.contains("Tipo:")) {
             int s = infoText.indexOf("Tipo:") + 5;
@@ -2399,16 +2402,6 @@ public class IEDNavigatorApp extends JFrame {
             sub = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
             // Recortar cfg: si esta pegado
             if (sub.contains("cfg:")) sub = sub.substring(0, sub.indexOf("cfg:")).trim();
-        } else if (infoText.contains("cfg:")) {
-            int s = infoText.indexOf("cfg:") + 4;
-            int e = infoText.indexOf("|", s);
-            sub = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
-            // Acortar si es muy largo
-            if (sub.length() > 28) sub = sub.substring(0, 28) + "…";
-        } else if (infoText.contains("Config:")) {
-            int s = infoText.indexOf("Config:") + 7;
-            int e = infoText.indexOf("|", s);
-            sub = (e > 0 ? infoText.substring(s, e) : infoText.substring(s)).trim();
         }
 
         if (!iedName.isEmpty() && iedName.equals("?")) iedName = "";
