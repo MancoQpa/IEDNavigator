@@ -904,97 +904,64 @@ public class IEC61850Client implements ClientEventListener {
 
             if (rcb instanceof Urcb) {
                 Urcb urcb = (Urcb) rcb;
-
-                // Configurar trigger options localmente
-                if (urcb.getTrgOps() != null) {
-                    urcb.getTrgOps().setDataChange(true);
-                    urcb.getTrgOps().setQualityChange(true);
-                    urcb.getTrgOps().setGeneralInterrogation(true);
-                }
-
-                // Paso 1: escribir trgOps (con rptEna = false para poder modificarlo)
-                urcb.getRptEna().setValue(false);
-                association.setRcbValues(urcb,
-                    false,  // rptId
-                    false,  // datSet
-                    false,  // rptEna  - aun no habilitar
-                    false,  // optFlds
-                    false,  // bufTm
-                    false,  // sqNum
-                    true,   // trgOps
-                    false); // intgPd
-
-                // Paso 2: habilitar incluyendo rptId (muchos servidores NRR/NARI exigen
-                // que el cliente escriba rptId junto con rptEna para reclamar ownership)
-                urcb.getRptEna().setValue(true);
-                association.setRcbValues(urcb,
-                    true,   // rptId   - escribir para reclamar ownership del URCB
-                    false,  // datSet
-                    true,   // rptEna  - HABILITAR
-                    false,  // optFlds
-                    false,  // bufTm
-                    false,  // sqNum
-                    false,  // trgOps
-                    false); // intgPd
-
-                // Verificar que el servidor realmente habilitó el RCB
-                association.getRcbValues(urcb);
-                boolean actuallyEnabled = urcb.getRptEna() != null && urcb.getRptEna().getValue();
-                System.out.println("[" + (actuallyEnabled ? "OK" : "WARN") + "] URCB " + urcb.getName()
-                    + " → RptEna en servidor = " + actuallyEnabled);
-                if (!actuallyEnabled) {
-                    throw new IOException("El servidor rechazó el enable del URCB: " + urcb.getName()
-                        + " (RptEna sigue false tras setRcbValues)");
-                }
-
+                enableRcb(urcb);
             } else if (rcb instanceof Brcb) {
                 Brcb brcb = (Brcb) rcb;
-
-                // Configurar trigger options localmente
-                if (brcb.getTrgOps() != null) {
-                    brcb.getTrgOps().setDataChange(true);
-                    brcb.getTrgOps().setQualityChange(true);
-                    brcb.getTrgOps().setGeneralInterrogation(true);
-                }
-
-                // Paso 1: escribir trgOps
-                brcb.getRptEna().setValue(false);
-                association.setRcbValues(brcb,
-                    false,  // rptId
-                    false,  // datSet
-                    false,  // rptEna
-                    false,  // optFlds
-                    false,  // bufTm
-                    false,  // sqNum
-                    true,   // trgOps
-                    false); // intgPd
-
-                // Paso 2: habilitar
-                brcb.getRptEna().setValue(true);
-                association.setRcbValues(brcb,
-                    true,   // rptId   - escribir para reclamar ownership
-                    false,  // datSet
-                    true,   // rptEna  - HABILITAR
-                    false,  // optFlds
-                    false,  // bufTm
-                    false,  // sqNum
-                    false,  // trgOps
-                    false); // intgPd
-
-                // Verificar que el servidor realmente habilitó el RCB
-                association.getRcbValues(brcb);
-                boolean actuallyEnabled = brcb.getRptEna() != null && brcb.getRptEna().getValue();
-                System.out.println("[" + (actuallyEnabled ? "OK" : "WARN") + "] BRCB " + brcb.getName()
-                    + " → RptEna en servidor = " + actuallyEnabled);
-                if (!actuallyEnabled) {
-                    throw new IOException("El servidor rechazó el enable del BRCB: " + brcb.getName()
-                        + " (RptEna sigue false tras setRcbValues)");
-                }
+                enableRcb(brcb);
             }
 
         } catch (ServiceError e) {
             throw new IOException("Error enabling report: " + e.getErrorCode(), e);
         }
+    }
+
+    /**
+     * Habilita un RCB con estrategia adaptativa:
+     * 1. Solo rptEna=true (mínimo, funciona con iec61850bean server)
+     * 2. Si falla verificación: trgOps primero, luego rptEna
+     * 3. Si falla: trgOps + rptId + rptEna juntos
+     */
+    private void enableRcb(Rcb rcb) throws ServiceError, IOException {
+        // Estrategia 1: solo escribir rptEna=true (iec61850bean server nativo)
+        rcb.getRptEna().setValue(true);
+        association.setRcbValues(rcb,
+            false, false, true, false, false, false, false, false);
+        association.getRcbValues(rcb);
+        if (rcb.getRptEna() != null && rcb.getRptEna().getValue()) {
+            System.out.println("[OK] RCB " + rcb.getName() + " habilitado (estrategia 1)");
+            return;
+        }
+
+        // Estrategia 2: trgOps primero, luego rptEna sola
+        if (rcb.getTrgOps() != null) {
+            rcb.getRptEna().setValue(false);
+            rcb.getTrgOps().setDataChange(true);
+            rcb.getTrgOps().setQualityChange(true);
+            rcb.getTrgOps().setGeneralInterrogation(true);
+            association.setRcbValues(rcb,
+                false, false, false, false, false, false, true, false);
+        }
+        rcb.getRptEna().setValue(true);
+        association.setRcbValues(rcb,
+            false, false, true, false, false, false, false, false);
+        association.getRcbValues(rcb);
+        if (rcb.getRptEna() != null && rcb.getRptEna().getValue()) {
+            System.out.println("[OK] RCB " + rcb.getName() + " habilitado (estrategia 2)");
+            return;
+        }
+
+        // Estrategia 3: trgOps + rptId + rptEna juntos (servidores NRR/NARI)
+        rcb.getRptEna().setValue(true);
+        association.setRcbValues(rcb,
+            true, false, true, false, false, false, true, false);
+        association.getRcbValues(rcb);
+        if (rcb.getRptEna() != null && rcb.getRptEna().getValue()) {
+            System.out.println("[OK] RCB " + rcb.getName() + " habilitado (estrategia 3)");
+            return;
+        }
+
+        throw new IOException("El servidor rechazó el enable del RCB: " + rcb.getName()
+            + " (RptEna sigue false tras setRcbValues)");
     }
 
     /**
