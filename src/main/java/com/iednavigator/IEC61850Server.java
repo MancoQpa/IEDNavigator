@@ -656,6 +656,31 @@ public class IEC61850Server implements ServerEventListener {
     }
 
     /**
+     * Fixes relative DataSet references in RCBs to full MMS references.
+     * SclParser stores datSet="TestDS" but iec61850bean server needs
+     * "TestIEDLD0/LLN0$TestDS" to match the DataSet when setValues() is called.
+     */
+    private void fixRcbDataSetReferences(ServerModel model) {
+        for (ModelNode ld : model.getChildren()) {
+            for (ModelNode ln : ld.getChildren()) {
+                for (ModelNode child : ln.getChildren()) {
+                    if (!(child instanceof com.beanit.iec61850bean.Urcb) &&
+                        !(child instanceof com.beanit.iec61850bean.Brcb)) continue;
+                    com.beanit.iec61850bean.Rcb rcb = (com.beanit.iec61850bean.Rcb) child;
+                    if (rcb.getDatSet() == null) continue;
+                    String dsRef = rcb.getDatSet().getStringValue();
+                    if (dsRef == null || dsRef.isEmpty()) continue;
+                    // Already full reference (contains "/" and "$")
+                    if (dsRef.contains("/") && dsRef.contains("$")) continue;
+                    String fullRef = ld.getName() + "/" + ln.getName() + "$" + dsRef;
+                    rcb.getDatSet().setValue(fullRef.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    System.out.println("[RCB] DataSet ref fixed: " + dsRef + " -> " + fullRef);
+                }
+            }
+        }
+    }
+
+    /**
      * Inicia el servidor (igual que la APK)
      */
     public boolean start(int port) {
@@ -673,6 +698,9 @@ public class IEC61850Server implements ServerEventListener {
         this.port = port;
 
         try {
+            // Fix relative DataSet refs in RCBs before starting (e.g. "TestDS" -> "TestIEDLD0/LLN0$TestDS")
+            fixRcbDataSetReferences(serverModel);
+
             // Crear ServerSap igual que la APK: (port, backlog, bindAddress, model, socketFactory)
             serverSap = new ServerSap(port, 0, null, serverModel, null);
 
