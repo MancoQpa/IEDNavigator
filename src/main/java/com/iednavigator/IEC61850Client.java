@@ -1004,7 +1004,16 @@ public class IEC61850Client implements ClientEventListener {
 
     @Override
     public void newReport(Report report) {
-        System.out.println("[INFO] Report received: " + report.getRptId());
+        List<FcModelNode> dbgVals = report.getValues();
+        int valCount = dbgVals != null ? dbgVals.size() : -1;
+        System.out.println("[INFO] Report received: " + report.getRptId()
+            + " values=" + valCount + " listener=" + (externalReportListener != null));
+
+        // Log visible en GUI via valueChangeListener
+        if (valueChangeListener != null) {
+            valueChangeListener.onValueChanged("_report_dbg",
+                "Report: " + report.getRptId() + " (" + valCount + " vals)", "report");
+        }
 
         // Notificar al listener externo (panel de Reports)
         if (externalReportListener != null) {
