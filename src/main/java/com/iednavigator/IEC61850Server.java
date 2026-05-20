@@ -661,6 +661,11 @@ public class IEC61850Server implements ServerEventListener {
      * "TestIEDLD0/LLN0$TestDS" to match the DataSet when setValues() is called.
      */
     private void fixRcbDataSetReferences(ServerModel model) {
+        // Log actual DataSet keys in the model
+        System.out.println("[RCB] DataSets in model:");
+        for (com.beanit.iec61850bean.DataSet ds : model.getDataSets()) {
+            System.out.println("[RCB]   key candidate: " + ds.getReferenceStr());
+        }
         for (ModelNode ld : model.getChildren()) {
             for (ModelNode ln : ld.getChildren()) {
                 for (ModelNode child : ln.getChildren()) {
@@ -672,6 +677,8 @@ public class IEC61850Server implements ServerEventListener {
                     if (dsRef == null || dsRef.isEmpty()) continue;
                     // Already full reference (contains "/" and "$")
                     if (dsRef.contains("/") && dsRef.contains("$")) continue;
+                    // Already full reference with "." notation
+                    if (dsRef.contains("/") && dsRef.contains(".")) continue;
                     String fullRef = ld.getName() + "/" + ln.getName() + "$" + dsRef;
                     rcb.getDatSet().setValue(fullRef.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                     System.out.println("[RCB] DataSet ref fixed: " + dsRef + " -> " + fullRef);
@@ -777,18 +784,32 @@ public class IEC61850Server implements ServerEventListener {
 
             if (node instanceof BasicDataAttribute) {
                 BasicDataAttribute bda = (BasicDataAttribute) node;
-                setBasicDataAttributeValue(bda, value);
 
                 // Notificar a clientes via reports (solo si el servidor está activo)
+                // setValues() requires BDAs from getModelCopy() (which have mirror→original).
+                // Passing original BDAs directly causes NPE (mirror=null on originals).
                 if (running && serverSap != null) {
                     try {
-                        List<BasicDataAttribute> changedData = new ArrayList<>();
-                        changedData.add(bda);
-                        serverSap.setValues(changedData);
-                        System.out.println("[SERVER] Clients notified via reports");
+                        // Get a fresh copy; its BDAs have mirror pointing to the originals
+                        com.beanit.iec61850bean.ServerModel copyModel = serverSap.getModelCopy();
+                        BasicDataAttribute copyBda = (BasicDataAttribute) copyModel.findModelNode(cleanRef, fc);
+                        if (copyBda != null) {
+                            // Set new value on COPY (setValues compares copy vs original to detect change)
+                            setBasicDataAttributeValue(copyBda, value);
+                            List<BasicDataAttribute> changedData = new ArrayList<>();
+                            changedData.add(copyBda);
+                            serverSap.setValues(changedData);
+                            System.out.println("[SERVER] Clients notified via reports for " + cleanRef);
+                        } else {
+                            // Fallback: update original directly (no report)
+                            setBasicDataAttributeValue(bda, value);
+                        }
                     } catch (Exception e) {
-                        System.out.println("[SERVER] Value changed locally (no clients to notify): " + e.getMessage());
+                        System.out.println("[SERVER] setValues error: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                        setBasicDataAttributeValue(bda, value);
                     }
+                } else {
+                    setBasicDataAttributeValue(bda, value);
                 }
 
                 String newValue = bda.getValueString();
