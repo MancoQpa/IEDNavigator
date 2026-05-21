@@ -563,6 +563,91 @@
 | 2026-04-30 | PN-001/002/003/004 | ✅ OK | Diccionario, íconos, dataset nav, puerto, display IED |
 | 2026-05-18 | Fix Java 11 compat | ✅ OK | `--release 11` en compile.ps1; `static Color` → `final Color` en IconFactory |
 | 2026-05-18 | build_zip_installer_v32.ps1 | ✅ OK | Release v3.2 funcional; launcher PS1 corregido |
+| 2026-05-20 | FIX-RCB-001 | ✅ OK | reserveUrcb + cancelUrcbReservation; URCB reservado antes de enable |
+| 2026-05-21 | FIX-RCB-002 | ✅ OK | Cast explícito Urcb/Brcb en enableRcb; servidor muestra enabled=true |
+| 2026-05-21 | FIX-RCB-003 | ✅ OK | Debug logs eliminados de IEC61850Client + IEC61850Server |
+| 2026-05-21 | FIX-RCB-004 | ✅ OK | association.enableReporting(rcb) → chgRcbs=1 → reports llegan. Verificado en runtime |
+
+---
+
+---
+
+## FASE FIX — Correcciones funcionales (com.iednavigator)
+
+### [FIX-RCB-001] Fix reportes URCB — reserveUrcb antes de habilitar
+- **Fecha**: 2026-05-20
+- **Archivo**: `src/main/java/com/iednavigator/IEC61850Client.java`
+- **Síntoma**: URCB aparecía "Habilitado" en el cliente pero el servidor lo tenía `enabled=false reserved=NULL`. `newReport()` nunca era llamado → tabla de reportes siempre vacía.
+- **Causa raíz**: iec61850bean server exige que el URCB esté **reservado** (`RsvTms`) por la asociación cliente antes de aceptar `setRcbValues(rptEna=true)`. Sin `reserveUrcb()`, el servidor ignora silenciosamente el enable.
+- **Diagnóstico**: bytecode analysis de `ServerAssociation.getWriteResult()` confirmó que el servidor verifica `reserved != null && reserved == currentAssociation` antes de llamar `urcb.enable()`. Debug con reflexión mostró `reserved=NULL` en el URCB del servidor.
+- **Fix en `enableReporting()`**:
+  ```java
+  if (rcb instanceof Urcb) {
+      Urcb urcb = (Urcb) rcb;
+      association.reserveUrcb(urcb);  // ← NUEVO: reservar antes de habilitar
+      enableRcb(urcb);
+  }
+  ```
+- **Fix en `disableReporting()`** (después de setRcbValues para Urcb):
+  ```java
+  try { association.cancelUrcbReservation((Urcb) rcb); } catch (Exception ignore) {}
+  ```
+- **Fixes previos en esta sesión** (mismo bug, diferentes capas):
+  - `dataRef="false"` en `SIN SMV/CID/test_smoke.cid` — `dataRef="true"` causaba que `processReport()` hiciera index misalignment → `ServiceError` → `ClientReceiver` moría silenciosamente
+  - `extractNodeValue(ModelNode)` en `ReportsPanel.java` — los valores del DataSet son `FcDataObject`, no `BasicDataAttribute`; sin el helper recursive los valores salían vacíos
+  - `findDataSetField(Class)` en `IEC61850Server.java` — `Rcb.class.getDeclaredField("dataSet")` lanzaba `NoSuchFieldException` porque `dataSet` está en `Rcb` pero el bytecode lo declara en `Urcb`; fix: buscar por tipo `DataSet.class` subiendo la jerarquía
+- **Rollback**:
+  ```java
+  // Eliminar la línea: association.reserveUrcb(urcb);
+  // Eliminar la línea: try { association.cancelUrcbReservation((Urcb) rcb); } catch (Exception ignore) {}
+  ```
+- **Verificación**: Compilar → levantar servidor (test_smoke.cid) → conectar cliente → habilitar URCB → cambiar valor en servidor → `[DBG-REPORT]` debe aparecer en consola y fila en tabla
+- **Estado**: ✅ Aplicado (pendiente prueba en runtime)
+
+### [FIX-RCB-002] Fix enableRcb — cast explícito a Urcb/Brcb
+- **Fecha**: 2026-05-21
+- **Archivo**: `src/main/java/com/iednavigator/IEC61850Client.java`
+- **Síntoma**: Reports nunca llegaban al cliente. Log servidor mostraba `[DBG-URCB] urcb01 enabled=false reserved=ServerAssociation` y `[SERVER] Clients notified via reports` pero el cliente no recibía nada.
+- **Causa raíz**: `enableRcb(Rcb rcb)` llamaba `association.setRcbValues(rcb, ...)` con tipo estático `Rcb` en vez de castear a `Urcb`/`Brcb`. iec61850bean tiene una sobrecarga genérica `setRcbValues(Rcb, ...)` que NO dispara `urcb.enable(serverModel)` en el servidor → `chgRcbs` queda vacío → `setValues()` ejecuta sin error pero no envía reports.
+- **Diagnóstico**: Log `enabled=false` en servidor confirmó que el URCB nunca se habilitó a pesar de `reserved=ServerAssociation`. Comparar con `disableReporting()` que SÍ castea explícitamente.
+- **Fix**: Refactorizar `enableRcb` con `instanceof` + cast explícito → `setRcbValues(Urcb, ...)` / `setRcbValues(Brcb, ...)` (idéntico a como `disableReporting` lo hace).
+- **Fix adicional**: Clases del instalador estaban desactualizadas (2026-05-20 19:45). Se copiaron las clases recién compiladas al instalador.
+- **Rollback**: Volver al `setRcbValues(rcb, ...)` sin cast (regresa el bug).
+- **Verificación**: Compilar → servidor con test_smoke.cid → cliente habilita URCB → cambiar `GGIO1/Ind1.stVal` → debe aparecer `[OK] RCB urcb01 → rptEna local=true` en cliente y fila en tabla de Reports.
+- **Estado**: ✅ Aplicado — pendiente prueba runtime
+
+### [FIX-RCB-003] Limpieza de debug logs — producción
+- **Fecha**: 2026-05-21
+- **Archivos**: `IEC61850Client.java`, `IEC61850Server.java`
+- **Logs eliminados**:
+  - `IEC61850Client.java`: bloque `[DBG-SETRPT]` en `enableReporting()`, todos los `[REPORT]` debug prints en `newReport()`
+  - `IEC61850Server.java`: bloque `[DBG-RELINK]` en `processRcbDataSet()`, bloque `[DBG-CHGRCBS]`/`[DBG-URCB]` de 40+ líneas con reflexión en `setDataValue()`
+- **Estado**: ✅ Aplicado
+
+### [FIX-RCB-004] Fix definitivo — usar association.enableReporting(rcb)
+- **Fecha**: 2026-05-21
+- **Archivo**: `src/main/java/com/iednavigator/IEC61850Client.java`
+- **Síntoma**: Reports nunca llegaban al cliente. Log servidor mostraba `[DBG-URCB] chgRcbs=0` para todos los BDAs del DataSet, incluso con URCB `enabled=true` y `reserved=ServerAssociation`.
+- **Causa raíz**: `enableRcb()` usaba `association.setRcbValues(urcb, false, false, true, ...)` que envía un Write MMS con bitmask. En `ServerAssociation`, el handler de `setRcbValues` procesa el campo `RptEna=true` pero **no llama** a `urcb.enable()` — solo actualiza el campo BDA del URCB. Sin `urcb.enable()`, `chgRcbs` queda vacío en todos los BDAs → `setValues()` no encuentra suscriptores → reports nunca se envían.
+- **Diagnóstico**: Reflexión confirmó `chgRcbs.size=0` y `contents=[]` en todos los BDAs del DataSet. Comparar `setRcbValues` (bitmask) vs `enableReporting()` (directo a `setDataValues(rptEnaBda)`) via decompile de `ClientAssociation.class`: la segunda variante llama directamente al handler en `ServerAssociation` que sí invoca `urcb.enable()`.
+- **Fix en `enableRcb()`**:
+  ```java
+  private void enableRcb(Rcb rcb) throws ServiceError, IOException {
+      // Use the official enableReporting() API which calls setDataValues(rptEnaBda)
+      // directly — this triggers the correct RptEna handler in ServerAssociation.
+      association.enableReporting(rcb);
+      try {
+          association.getRcbValues(rcb);
+      } catch (ServiceError e) {
+          System.out.println("[WARN] getRcbValues post-enable: " + e.getMessage());
+      }
+      boolean enabled = rcb.getRptEna() != null && rcb.getRptEna().getValue();
+      System.out.println("[" + (enabled ? "OK" : "INFO") + "] RCB " + rcb.getName()
+          + " rptEna local=" + enabled);
+  }
+  ```
+- **Verificación**: `[OK] RCB urcb01 rptEna local=true` en cliente + `urcb01 enabled=true chgRcbs=1` en servidor + `[REPORT] newReport() CALLED values=3` + filas en tabla de Reports. ✅ Confirmado en runtime.
+- **Estado**: ✅ Aplicado y verificado en runtime
 
 ---
 

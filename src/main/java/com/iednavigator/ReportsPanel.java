@@ -362,10 +362,7 @@ class ReportsPanel {
                 for (int i = 0; i < values.size(); i++) {
                     FcModelNode node = values.get(i);
                     String ref = node.getReference().toString();
-                    String newValue = "";
-                    if (node instanceof BasicDataAttribute) {
-                        newValue = ((BasicDataAttribute) node).getValueString();
-                    }
+                    String newValue = extractNodeValue(node);
 
                     String prevValue = previousReportValues.getOrDefault(ref, "");
 
@@ -391,5 +388,18 @@ class ReportsPanel {
         } catch (Exception e) {
             log.accept("Error procesando report: " + e.getMessage());
         }
+    }
+
+    /** Recursively extract a readable value string from any ModelNode. */
+    private String extractNodeValue(ModelNode node) {
+        if (node instanceof BasicDataAttribute) {
+            return ((BasicDataAttribute) node).getValueString();
+        }
+        StringBuilder sb = new StringBuilder();
+        for (ModelNode child : node) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(child.getName()).append("=").append(extractNodeValue(child));
+        }
+        return sb.toString();
     }
 }

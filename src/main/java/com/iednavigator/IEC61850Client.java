@@ -904,6 +904,7 @@ public class IEC61850Client implements ClientEventListener {
 
             if (rcb instanceof Urcb) {
                 Urcb urcb = (Urcb) rcb;
+                association.reserveUrcb(urcb);
                 enableRcb(urcb);
             } else if (rcb instanceof Brcb) {
                 Brcb brcb = (Brcb) rcb;
@@ -916,41 +917,24 @@ public class IEC61850Client implements ClientEventListener {
     }
 
     /**
-     * Habilita un RCB con estrategia adaptativa:
-     * 1. Solo rptEna=true (mínimo, funciona con iec61850bean server)
-     * 2. Si falla verificación: trgOps primero, luego rptEna
-     * 3. Si falla: trgOps + rptId + rptEna juntos
+     * Habilita un RCB con un único Write de rptEna=true.
+     * NO escribir trgOps antes — el servidor iec61850bean limpia la reserva entre Writes,
+     * y si la reserva se pierde antes del Write de rptEna, el enable es ignorado silenciosamente.
+     * Los trgOps quedan como están en el servidor (configurados desde el SCL/CID).
      */
     private void enableRcb(Rcb rcb) throws ServiceError, IOException {
-        // Paso 1: configurar trgOps mientras rptEna=false
-        if (rcb.getTrgOps() != null) {
-            rcb.getRptEna().setValue(false);
-            rcb.getTrgOps().setDataChange(true);
-            rcb.getTrgOps().setQualityChange(true);
-            rcb.getTrgOps().setGeneralInterrogation(true);
-            try {
-                association.setRcbValues(rcb,
-                    false, false, false, false, false, false, true, false);
-            } catch (Exception e) {
-                System.out.println("[WARN] trgOps set rechazado: " + e.getMessage() + " - continuando");
-            }
-        }
+        // Use the official enableReporting() API which calls setDataValues(rptEnaBda)
+        // directly — this triggers the correct RptEna handler in ServerAssociation.
+        association.enableReporting(rcb);
 
-        // Paso 2: habilitar (solo rptEna=true — si no lanza ServiceError, asumimos éxito)
-        rcb.getRptEna().setValue(true);
-        association.setRcbValues(rcb,
-            false, false, true, false, false, false, false, false);
-
-        // Verificar — pero no fallar si el servidor no refleja el cambio en el modelo local
-        // (iec61850bean server puede no actualizar el BDA local tras setRcbValues)
         try {
             association.getRcbValues(rcb);
         } catch (ServiceError e) {
-            System.out.println("[WARN] getRcbValues post-enable falló: " + e.getMessage());
+            System.out.println("[WARN] getRcbValues post-enable: " + e.getMessage());
         }
         boolean enabled = rcb.getRptEna() != null && rcb.getRptEna().getValue();
         System.out.println("[" + (enabled ? "OK" : "INFO") + "] RCB " + rcb.getName()
-            + " → rptEna local=" + enabled + " (si no hubo ServiceError, el servidor lo aceptó)");
+            + " rptEna local=" + enabled);
     }
 
     /**
@@ -981,6 +965,7 @@ public class IEC61850Client implements ClientEventListener {
                     false,  // sqNum
                     false,  // trgOps
                     false); // intgPd
+                try { association.cancelUrcbReservation((Urcb) rcb); } catch (Exception ignore) {}
             } else if (rcb instanceof Brcb) {
                 association.setRcbValues((Brcb) rcb,
                     false,  // rptId
@@ -1004,17 +989,6 @@ public class IEC61850Client implements ClientEventListener {
 
     @Override
     public void newReport(Report report) {
-        List<FcModelNode> dbgVals = report.getValues();
-        int valCount = dbgVals != null ? dbgVals.size() : -1;
-        System.out.println("[INFO] Report received: " + report.getRptId()
-            + " values=" + valCount + " listener=" + (externalReportListener != null));
-
-        // Log visible en GUI via valueChangeListener
-        if (valueChangeListener != null) {
-            valueChangeListener.onValueChanged("_report_dbg",
-                "Report: " + report.getRptId() + " (" + valCount + " vals)", "report");
-        }
-
         // Notificar al listener externo (panel de Reports)
         if (externalReportListener != null) {
             externalReportListener.onReportReceived(report);

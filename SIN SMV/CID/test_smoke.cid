@@ -31,7 +31,7 @@
                 rptID="TestIED/LD0/LLN0.urcb01" buffered="false" intgPd="10000">
               <TrgOps dchg="true" qchg="true" dupd="false" period="true" gi="true"/>
               <OptFields seqNum="true" timeStamp="true" dataSet="true" reasonCode="true"
-                  dataRef="true" entryID="false" configRef="false"/>
+                  dataRef="false" entryID="false" configRef="false"/>
               <RptEnabled max="1"/>
             </ReportControl>
             <!-- BRCB: Buffered Report Control Block -->
@@ -39,7 +39,7 @@
                 rptID="TestIED/LD0/LLN0.brcb01" buffered="true" intgPd="10000" bufTime="0">
               <TrgOps dchg="true" qchg="true" dupd="false" period="true" gi="true"/>
               <OptFields seqNum="true" timeStamp="true" dataSet="true" reasonCode="true"
-                  dataRef="true" entryID="true" configRef="false"/>
+                  dataRef="false" entryID="true" configRef="false"/>
               <RptEnabled max="1"/>
             </ReportControl>
             <DOI name="NamPlt">

@@ -161,6 +161,21 @@ public class IEC61850Server implements ServerEventListener {
      * coincidencia de sufijo), limpia el valor del atributo para que el cliente no solicite
      * un DataSet inexistente.
      */
+    /** Busca el campo de tipo DataSet en la jerarquía de clases (recorre superclases). */
+    private static java.lang.reflect.Field findDataSetField(Class<?> cls) {
+        Class<?> c = cls;
+        while (c != null && c != Object.class) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (DataSet.class.isAssignableFrom(f.getType())) {
+                    f.setAccessible(true);
+                    return f;
+                }
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
     private void relinkRcbDataSets(ServerModel model) {
         // Índice de DataSets: referencia completa → objeto
         Map<String, DataSet> dsIndex = new HashMap<>();
@@ -174,16 +189,9 @@ public class IEC61850Server implements ServerEventListener {
             }
         }
 
-        // Obtener el campo Rcb.dataSet por reflexión (package-private)
-        java.lang.reflect.Field dataSetField = null;
-        try {
-            Class<?> rcbClass = Class.forName("com.beanit.iec61850bean.Rcb");
-            dataSetField = rcbClass.getDeclaredField("dataSet");
-            dataSetField.setAccessible(true);
-        } catch (Exception e) {
-            System.err.println("[SERVER] No se pudo acceder a Rcb.dataSet por reflexión: " + e.getMessage());
-        }
-
+        // Obtener el campo DataSet por reflexión buscando por tipo en la jerarquía
+        java.lang.reflect.Field urcbDataSetField = findDataSetField(Urcb.class);
+        java.lang.reflect.Field brcbDataSetField = findDataSetField(Brcb.class);
         int linked = 0, cleared = 0;
 
         for (ModelNode ldNode : model.getChildren()) {
@@ -195,14 +203,14 @@ public class IEC61850Server implements ServerEventListener {
                 Collection<Urcb> urcbs = ln.getUrcbs();
                 if (urcbs != null) {
                     for (Urcb urcb : urcbs) {
-                        if (processRcbDataSet(urcb, dsIndex, dataSetField, model)) linked++;
+                        if (processRcbDataSet(urcb, dsIndex, urcbDataSetField, model)) linked++;
                         else cleared++;
                     }
                 }
                 Collection<Brcb> brcbs = ln.getBrcbs();
                 if (brcbs != null) {
                     for (Brcb brcb : brcbs) {
-                        if (processRcbDataSet(brcb, dsIndex, dataSetField, model)) linked++;
+                        if (processRcbDataSet(brcb, dsIndex, brcbDataSetField, model)) linked++;
                         else cleared++;
                     }
                 }
@@ -257,7 +265,7 @@ public class IEC61850Server implements ServerEventListener {
                         dataSetField.set(rcb, found);
                     }
                 } catch (Exception e) {
-                    // Si la reflexión falla, al menos el datSet string está correcto
+                    // ignored — datSet string value is still correct
                 }
             }
             return true;
