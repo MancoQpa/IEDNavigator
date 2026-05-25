@@ -258,6 +258,17 @@ class ReportsPanel {
                     for (ModelNode node : ln.getChildren()) {
                         searchForRcbs(node, ldName, lnName);
                     }
+                    // En modo cliente, iec61850bean pone URCBs/BRCBs en getUrcbs()/getBrcbs()
+                    // (no en getChildren()). Buscarlos explicitamente para cubrir ambos modos.
+                    if (ln instanceof LogicalNode) {
+                        LogicalNode logicalNode = (LogicalNode) ln;
+                        if (logicalNode.getUrcbs() != null) {
+                            for (Urcb u : logicalNode.getUrcbs()) searchForRcbs(u, ldName, lnName);
+                        }
+                        if (logicalNode.getBrcbs() != null) {
+                            for (Brcb b : logicalNode.getBrcbs()) searchForRcbs(b, ldName, lnName);
+                        }
+                    }
                 }
             }
             log.accept("RCBs encontrados: " + rcbMap.size());
@@ -273,6 +284,7 @@ class ReportsPanel {
         if (node instanceof Urcb) {
             Urcb urcb = (Urcb) node;
             String name = ldName + "/" + lnName + "." + urcb.getName();
+            if (rcbMap.containsKey(name)) return; // evitar duplicados (server vs client mode)
             String dataset = urcb.getDatSet() != null ? urcb.getDatSet().getStringValue() : "";
             boolean enabled = urcb.getRptEna() != null && urcb.getRptEna().getValue();
             String trgOps = buildTrgOpsString(urcb.getTrgOps());
@@ -282,6 +294,7 @@ class ReportsPanel {
         } else if (node instanceof Brcb) {
             Brcb brcb = (Brcb) node;
             String name = ldName + "/" + lnName + "." + brcb.getName();
+            if (rcbMap.containsKey(name)) return; // evitar duplicados
             String dataset = brcb.getDatSet() != null ? brcb.getDatSet().getStringValue() : "";
             boolean enabled = brcb.getRptEna() != null && brcb.getRptEna().getValue();
             String trgOps = buildTrgOpsString(brcb.getTrgOps());
