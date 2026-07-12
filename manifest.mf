@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Main-Class: com.iednavigator.IEDNavigatorApp
+Class-Path: lib/iec61850bean-1.9.0.jar lib/pcap4j-core-1.8.2.jar lib/pcap4j-packetfactory-static-1.8.2.jar lib/slf4j-api-2.0.9.jar lib/slf4j-simple-2.0.9.jar lib/jna-5.14.0.jar lib/jna-platform-5.14.0.jar lib/flatlaf-3.2.jar lib/asn1bean-1.13.0.jar
+

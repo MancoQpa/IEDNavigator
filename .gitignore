@@ -1,0 +1,105 @@
+# =============================================
+# IEDNavigator - .gitignore
+# =============================================
+
+# Clases compiladas y JARs de salida
+classes/
+target/
+dist/
+*.class
+
+# JARs: excluir todo excepto los de lib/ (dependencias pre-empaquetadas)
+*.jar
+!lib/*.jar
+
+# Backups y ZIPs
+*.zip
+*.rar
+BACKUP_*.zip
+ied_navigator_installer.zip
+
+# Versiones antiguas y copias
+IEDNavigator_completo/
+REFACTORED_SIN_NATIVE/
+SIN SMV - copia/
+SIN SMV - copia (2)/
+installer/output/
+installer/download_cache/
+
+# Binarios y ejecutables de terceros
+*.exe
+*.dll
+!lib/*.dll
+*.lnk
+PcapDotNet.Core.dll
+
+# Carpeta de requisitos (archivos muy pesados)
+requisistos ied_navigator/
+
+# Logs y temporales
+*.log
+*.txt
+!README.txt
+MMS_log_file.txt
+SIN SMV/log*/
+
+# Carpetas personales / terceros
+SIN SMV/curso nari_cids_ultimo_proyecto/
+SIN SMV/IEDNavigator_Informe_2026-04-23/
+SIN SMV/PROMPT_PRESENTACION_Y_PAPERS.md
+SIN SMV/PROMPT_PRESENTACION_IEDNavigator.txt
+SIN SMV/*.pdf
+SIN SMV/gen_*.py
+
+# CIDs de equipos de fabricantes (potencialmente propietarios)
+# Solo se incluye test_smoke.cid (genérico, creado por el proyecto)
+SIN SMV/CID/*.cid
+SIN SMV/CID/*.CID
+SIN SMV/CID/*.icd
+SIN SMV/CID/*.ICD
+SIN SMV/CID/*.scd
+SIN SMV/CID/*.SCD
+!SIN SMV/CID/test_smoke.cid
+
+# JNA versión antigua eliminada
+lib/jna-5.13.0.jar
+
+# Documentos personales internos
+Revision_2 (Parcial).docx
+Revision_2 (Parcial).pdf
+Wavewin ABB/
+
+# Proyectos Android (repos separados)
+android-ied-navigator/
+android-ion7400-simulator/
+android_ied_simulator - que mejor salio v3.02/
+
+# Versiones antiguas empaquetadas
+IEDNavigator_v*/
+IEDNavigator.jar
+IEDNavigator_new.jar
+# Excepciones: distribución instalador (clases compiladas para la otra PC)
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/IEDNavigator.bat
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/README.txt
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/INSTALAR.bat
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/classes/
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/classes/**
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/lib/
+!SIN SMV/IEDNavigator_v3.0-edu_instalador/lib/**
+
+# HarmonicMonitor (repo separado)
+HarmonicMonitor/
+
+# Documentación local — no subir a GitHub
+SIN SMV/IEDNAVIGATOR_GUIA_DESARROLLADOR.md
+SIN SMV/IEDNAVIGATOR_GUIA_USUARIO_COMPARATIVA.md
+
+# Claude AI internal
+.claude/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+*.swp

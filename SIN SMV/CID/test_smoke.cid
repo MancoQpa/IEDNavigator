@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SCL xmlns="http://www.iec.ch/61850/2003/SCL">
+  <Header id="TestSimple"/>
+  <IED name="TestIED">
+    <Services>
+      <DynAssociation />
+      <GetDirectory />
+      <GetDataObjectDefinition />
+      <GetDataSetValue />
+      <DataSetDirectory />
+      <ReadWrite />
+      <GetCBValues />
+      <UnbufferedReporting />
+      <BufferedReporting />
+      <ReportSettings cbName="Dyn" datSet="Dyn" rptID="Dyn" optFields="Dyn"
+          bufTime="Dyn" trgOps="Dyn" intgPd="Dyn" />
+    </Services>
+    <AccessPoint name="AP1">
+      <Server>
+        <Authentication />
+        <LDevice inst="LD0">
+          <LN0 lnClass="LLN0" lnType="LLN0Type" inst="">
+            <!-- DataSet con 3 valores monitoreables -->
+            <DataSet name="TestDS">
+              <FCDA ldInst="LD0" lnClass="LLN0" fc="ST" doName="Mod" daName="stVal" />
+              <FCDA ldInst="LD0" lnClass="LPHD" lnInst="1" fc="ST" doName="PhyHealth" daName="stVal" />
+              <FCDA ldInst="LD0" lnClass="GGIO" lnInst="1" fc="ST" doName="Ind1" daName="stVal" />
+            </DataSet>
+            <!-- URCB: Unbuffered Report Control Block -->
+            <ReportControl name="urcb01" confRev="1" datSet="TestDS"
+                rptID="TestIED/LD0/LLN0.urcb01" buffered="false" intgPd="10000">
+              <TrgOps dchg="true" qchg="true" dupd="false" period="true" gi="true"/>
+              <OptFields seqNum="true" timeStamp="true" dataSet="true" reasonCode="true"
+                  dataRef="false" entryID="false" configRef="false"/>
+              <RptEnabled max="1"/>
+            </ReportControl>
+            <!-- BRCB: Buffered Report Control Block -->
+            <ReportControl name="brcb01" confRev="1" datSet="TestDS"
+                rptID="TestIED/LD0/LLN0.brcb01" buffered="true" intgPd="10000" bufTime="0">
+              <TrgOps dchg="true" qchg="true" dupd="false" period="true" gi="true"/>
+              <OptFields seqNum="true" timeStamp="true" dataSet="true" reasonCode="true"
+                  dataRef="false" entryID="true" configRef="false"/>
+              <RptEnabled max="1"/>
+            </ReportControl>
+            <DOI name="NamPlt">
+              <DAI name="vendor"><Val>IEDNavigator</Val></DAI>
+              <DAI name="swRev"><Val>3.4</Val></DAI>
+              <DAI name="d"><Val>Test IED</Val></DAI>
+              <DAI name="configRev"><Val>v1.0-test</Val></DAI>
+            </DOI>
+            <DOI name="Mod">
+              <DAI name="ctlModel"><Val>status-only</Val></DAI>
+            </DOI>
+          </LN0>
+          <LN lnClass="LPHD" lnType="LPHDType" inst="1" prefix="">
+            <DOI name="PhyNam">
+              <DAI name="vendor"><Val>TestVendor</Val></DAI>
+            </DOI>
+          </LN>
+          <LN lnClass="GGIO" lnType="GGIOType" inst="1" prefix="">
+            <DOI name="Mod">
+              <DAI name="ctlModel"><Val>direct-with-normal-security</Val></DAI>
+            </DOI>
+          </LN>
+        </LDevice>
+      </Server>
+    </AccessPoint>
+  </IED>
+  <DataTypeTemplates>
+    <LNodeType id="LLN0Type" lnClass="LLN0">
+      <DO name="Mod" type="INCType"/>
+      <DO name="Beh" type="INSType"/>
+      <DO name="Health" type="INSType"/>
+      <DO name="NamPlt" type="LPLType"/>
+    </LNodeType>
+    <LNodeType id="LPHDType" lnClass="LPHD">
+      <DO name="PhyNam" type="DPLType"/>
+      <DO name="PhyHealth" type="INSType"/>
+      <DO name="Proxy" type="SPSType"/>
+    </LNodeType>
+    <LNodeType id="GGIOType" lnClass="GGIO">
+      <DO name="Mod" type="INCType"/>
+      <DO name="Beh" type="INSType"/>
+      <DO name="Health" type="INSType"/>
+      <DO name="Ind1" type="SPSType"/>
+      <DO name="SPCSO1" type="SPCType"/>
+    </LNodeType>
+    <DOType id="INCType" cdc="INC">
+      <DA name="stVal" bType="INT32" fc="ST" dchg="true"/>
+      <DA name="q" bType="Quality" fc="ST" qchg="true"/>
+      <DA name="t" bType="Timestamp" fc="ST"/>
+      <DA name="ctlModel" bType="Enum" type="CtlModelKind" fc="CF"/>
+    </DOType>
+    <DOType id="INSType" cdc="INS">
+      <DA name="stVal" bType="INT32" fc="ST" dchg="true"/>
+      <DA name="q" bType="Quality" fc="ST" qchg="true"/>
+      <DA name="t" bType="Timestamp" fc="ST"/>
+    </DOType>
+    <DOType id="SPSType" cdc="SPS">
+      <DA name="stVal" bType="BOOLEAN" fc="ST" dchg="true"/>
+      <DA name="q" bType="Quality" fc="ST" qchg="true"/>
+      <DA name="t" bType="Timestamp" fc="ST"/>
+    </DOType>
+    <DOType id="SPCType" cdc="SPC">
+      <DA name="stVal" bType="BOOLEAN" fc="ST" dchg="true"/>
+      <DA name="q" bType="Quality" fc="ST" qchg="true"/>
+      <DA name="t" bType="Timestamp" fc="ST"/>
+      <DA name="ctlModel" bType="Enum" type="CtlModelKind" fc="CF"/>
+      <DA name="Oper" bType="Struct" type="SBOType" fc="CO"/>
+    </DOType>
+    <DOType id="LPLType" cdc="LPL">
+      <DA name="vendor" bType="VisString255" fc="DC"/>
+      <DA name="swRev" bType="VisString255" fc="DC"/>
+      <DA name="d" bType="VisString255" fc="DC"/>
+      <DA name="configRev" bType="VisString255" fc="DC"/>
+    </DOType>
+    <DOType id="DPLType" cdc="DPL">
+      <DA name="vendor" bType="VisString255" fc="DC"/>
+      <DA name="hwRev" bType="VisString255" fc="DC"/>
+    </DOType>
+    <DAType id="SBOType">
+      <BDA name="ctlVal" bType="BOOLEAN"/>
+      <BDA name="origin" bType="Struct" type="OriginType"/>
+      <BDA name="ctlNum" bType="INT8U"/>
+      <BDA name="T" bType="Timestamp"/>
+      <BDA name="Test" bType="BOOLEAN"/>
+    </DAType>
+    <DAType id="OriginType">
+      <BDA name="orCat" bType="Enum" type="OrCatKind"/>
+      <BDA name="orIdent" bType="Octet64"/>
+    </DAType>
+    <EnumType id="CtlModelKind">
+      <EnumVal ord="0">status-only</EnumVal>
+      <EnumVal ord="1">direct-with-normal-security</EnumVal>
+      <EnumVal ord="2">sbo-with-normal-security</EnumVal>
+      <EnumVal ord="3">direct-with-enhanced-security</EnumVal>
+      <EnumVal ord="4">sbo-with-enhanced-security</EnumVal>
+    </EnumType>
+    <EnumType id="OrCatKind">
+      <EnumVal ord="0">not-supported</EnumVal>
+      <EnumVal ord="1">bay-control</EnumVal>
+      <EnumVal ord="2">station-control</EnumVal>
+      <EnumVal ord="3">remote-control</EnumVal>
+      <EnumVal ord="4">automatic-bay</EnumVal>
+      <EnumVal ord="5">automatic-station</EnumVal>
+      <EnumVal ord="6">automatic-remote</EnumVal>
+      <EnumVal ord="7">maintenance</EnumVal>
+      <EnumVal ord="8">process</EnumVal>
+    </EnumType>
+  </DataTypeTemplates>
+</SCL>
