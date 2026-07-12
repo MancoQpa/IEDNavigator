@@ -140,13 +140,13 @@ Sin esta DLL todas las demas funciones funcionan con normalidad.
 
 | Libreria        | Version | Licencia          |
 |-----------------|---------|-------------------|
-| iec61850bean    | 1.9.0   | GPL v3            |
+| iec61850bean    | 1.9.0   | Apache 2.0        |
 | pcap4j          | 1.8.2   | MIT               |
 | JNA             | 5.14.0  | Apache 2.0/LGPL   |
 | FlatLaf         | 3.2     | Apache 2.0        |
 | SLF4J           | 2.0.9   | MIT               |
 | asn1bean        | 1.13.0  | Apache 2.0        |
-| jasn1           | 1.11.3  | GPL v3            |
+| jasn1           | 1.11.3  | Apache 2.0        |
 | ANTLR           | 2.7.7   | BSD               |
 | libiec61850 *   | --      | GPL v3 (externo)  |
 | Npcap *         | --      | Npcap (externo)   |
